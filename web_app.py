@@ -160,6 +160,120 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/api/requirement/preview', methods=['POST'])
+def preview_requirement():
+    """Run a lightweight PM analysis on a requirement and return
+    the parsed structure plus the list of ambiguous/edge-case points
+    that the user should confirm before generating full test cases.
+
+    Request body:
+    { "requirement": "...", "extra_notes": "..." }
+
+    Response:
+    {
+      "status": "success",
+      "parsed": { ... full PM output ... },
+      "ambiguous_points": [ { "question": "...", "context": "..." } ],
+      "summary": "1-3 sentence summary of the parsed requirement"
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        requirement = (data.get('requirement') or '').strip()
+        extra_notes = (data.get('extra_notes') or '').strip()
+        if not requirement:
+            return jsonify({'error': 'requirement is required'}), 400
+
+        # Build the input that PM will see (include extra_notes if any)
+        full_input = requirement
+        if extra_notes:
+            full_input = f"{requirement}\n\n[用户补充说明]\n{extra_notes}"
+
+        from src.agents.pm_agent import ProductManagerAgent
+        agent = ProductManagerAgent()
+        output = agent.act(full_input)
+
+        parsed = output.content if isinstance(output.content, dict) else {}
+        questions = output.questions or []
+
+        # Build ambiguous_points with optional context from parsed
+        ambiguous_points = []
+        # questions may be a list of strings (legacy) or a list of dicts
+        for q in (parsed.get('ambiguous_points') or []):
+            if isinstance(q, dict):
+                ambiguous_points.append({
+                    'question': q.get('question', ''),
+                    'context': q.get('context', ''),
+                    'category': q.get('category', 'general'),
+                })
+            else:
+                ambiguous_points.append({'question': str(q), 'context': '', 'category': 'general'})
+        # Fall back to output.questions if no structured ambiguous_points
+        if not ambiguous_points and questions:
+            for q in questions:
+                ambiguous_points.append({'question': str(q), 'context': '', 'category': 'general'})
+
+        # If the LLM didn't return structured output (CLI returned plain text),
+        # fall back to a lightweight LLM call that asks directly for edge points
+        # in a controlled JSON shape.
+        if not ambiguous_points:
+            try:
+                from src.adapters.llm_adapter import LLMAdapter
+                llm = LLMAdapter()
+                fallback_prompt = (
+                    "你是一个资深测试工程师。用户提供了以下需求，请列出 3-7 个**在测试中容易遗漏/边界值/灰色地带**的注意事项，"
+                    "让用户在线勾选确认。每条问题要简洁、明确、可勾选（是/否或具体值），不要问开放性问题。\n\n"
+                    f"需求：\n{requirement}\n\n"
+                    + (f"补充说明：\n{extra_notes}\n\n" if extra_notes else "")
+                    + '请严格用以下 JSON 格式返回（不要任何其他内容、不要 markdown 代码块）：\n'
+                    '{"summary": "<一句话需求概述>",'
+                    '"ambiguous_points": ['
+                    '{"question": "...", "context": "...", "category": "边界值|权限|异常|业务规则|性能|兼容性|其他"}'
+                    ']}'
+                )
+                fb = llm.generate_structured(
+                    system_prompt="你只输出 JSON。",
+                    user_message=fallback_prompt,
+                )
+                if isinstance(fb, dict):
+                    if fb.get('ambiguous_points'):
+                        for q in fb['ambiguous_points']:
+                            if isinstance(q, dict) and q.get('question'):
+                                ambiguous_points.append({
+                                    'question': q.get('question', ''),
+                                    'context': q.get('context', ''),
+                                    'category': q.get('category', 'general'),
+                                })
+                    if not parsed.get('summary') and fb.get('summary'):
+                        parsed['summary'] = fb['summary']
+            except Exception as e:
+                logger.debug("fallback edge detection failed: %s", e)
+
+        # Build a short summary (1-3 sentences) from parsed structure
+        summary = parsed.get('summary') or parsed.get('description') or parsed.get('title') or ''
+        if not summary and parsed.get('requirements'):
+            try:
+                first_req = parsed['requirements'][0] if isinstance(parsed['requirements'], list) else parsed['requirements']
+                if isinstance(first_req, dict):
+                    summary = first_req.get('description') or first_req.get('summary') or ''
+                else:
+                    summary = str(first_req)[:200]
+            except Exception:
+                pass
+
+        return jsonify({
+            'status': 'success',
+            'parsed': parsed,
+            'ambiguous_points': ambiguous_points,
+            'summary': summary[:500] if summary else '',
+            'has_error': bool(output.error),
+            'error': output.error or None,
+        })
+    except Exception as e:
+        logger.error("Error previewing requirement: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/requirement', methods=['POST'])
 def process_requirement():
     """Process a requirement and generate test cases.
@@ -170,7 +284,10 @@ def process_requirement():
       "frontend_context": [<manual picks, optional>],
       "backend_context":  [<manual picks, optional>],
       "extra_notes":      "<free-form text to supplement logic>",
-      "auto_context":     true   # default true: auto-match KB by keywords
+      "auto_context":     true,   # default true: auto-match KB by keywords
+      "edge_confirmations": [       # answers to the previewed ambiguous points
+        { "question": "...", "answer": "..." }, ...
+      ]
     }
     """
     try:
@@ -180,6 +297,7 @@ def process_requirement():
         backend_context = list(data.get('backend_context') or [])
         extra_notes = (data.get('extra_notes') or '').strip()
         auto_context = bool(data.get('auto_context', True))
+        edge_confirmations = list(data.get('edge_confirmations') or [])
 
         if not requirement:
             return jsonify({'error': 'Requirement is required'}), 400
@@ -230,6 +348,21 @@ def process_requirement():
                 "## 用户补充的额外说明（人工提供，需要在测试用例/证据链中体现）\n"
                 + extra_notes
             )
+        if edge_confirmations:
+            qa_lines = []
+            for item in edge_confirmations:
+                if not isinstance(item, dict):
+                    continue
+                q = (item.get('question') or '').strip()
+                a = (item.get('answer') or '').strip()
+                if not q or not a:
+                    continue
+                qa_lines.append(f"- 边界问题：{q}\n  用户确认：{a}")
+            if qa_lines:
+                sections.append(
+                    "## 需求边界确认（用户已逐条回答，需要在测试用例/证据链中体现）\n"
+                    + "\n".join(qa_lines)
+                )
         if merged_fe or merged_be:
             context_payload = {
                 'frontend_selected_knowledge': merged_fe,

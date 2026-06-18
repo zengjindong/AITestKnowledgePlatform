@@ -181,7 +181,7 @@
                 <textarea id="requirement-input" placeholder="例如：在上报管理模块中新增一个媒体平台选项：谷歌分析(Google Analytics)，需要支持 pageview 和 user properties 上报。"></textarea>
                 <div class="hint">提示：先在右侧 FE/BE 知识库中搜索并“加入本次需求”，系统会把这些组件/API作为证据上下文交给智能体。</div>
                 <div class="row" style="margin-top: 14px;">
-                    <button class="btn btn-primary" id="btn-submit" onclick="submitRequirement()">生成测试用例</button>
+                    <button class="btn btn-primary" id="btn-submit" onclick="onGenerateClick()">生成测试用例</button>
                     <button class="btn btn-secondary" onclick="resetContext()">清空本次上下文</button>
                 </div>
             </div>
@@ -493,7 +493,190 @@
         ['pm','fe_be','qa','done'].forEach(s => updateStage(s, 'pending'));
     }
 
-    async function submitRequirement() {
+    async function onGenerateClick() {
+        const requirement = document.getElementById('requirement-input').value.trim();
+        if (!requirement) {
+            alert('请输入需求');
+            return;
+        }
+        // Step 1: call /api/requirement/preview to get ambiguous points
+        setLoading(true);
+        try {
+            const extraNotes = (document.getElementById('extra-notes')?.value || '').trim();
+            const resp = await fetch('/api/requirement/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requirement, extra_notes: extraNotes })
+            });
+            const data = await resp.json();
+            if (data.error) {
+                setLoading(false);
+                alert('预览失败: ' + data.error);
+                return;
+            }
+            setLoading(false);
+            // If there are no questions, skip the dialog
+            const points = data.ambiguous_points || [];
+            if (points.length === 0) {
+                // No clarifications needed, run directly
+                submitRequirement();
+                return;
+            }
+            // Show confirmation dialog
+            window._lastEdgePoints = points;
+            showEdgeConfirmDialog({
+                requirement,
+                extraNotes,
+                summary: data.summary || '',
+                points
+            });
+        } catch (e) {
+            setLoading(false);
+            alert('预览失败: ' + e.message);
+        }
+    }
+
+    function showEdgeConfirmDialog(ctx) {
+        // Remove any existing
+        const old = document.getElementById('edge-confirm-modal');
+        if (old) old.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'edge-confirm-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:999999;display:flex;align-items:center;justify-content:center;';
+
+        const pointsHtml = ctx.points.map((p, i) => {
+            const cat = p.category || 'general';
+            const catColors = {
+                '边界值': '#1976d2', '权限': '#7b1fa2', '异常': '#c62828',
+                '业务规则': '#2e7d32', '性能': '#e65100', '兼容性': '#00838f', '其他': '#616161'
+            };
+            const catColor = catColors[cat] || '#616161';
+            return `
+                <div style="padding:12px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:10px;background:#fafafa;">
+                    <div style="display:flex;align-items:flex-start;gap:8px;">
+                        <span style="background:${catColor};color:#fff;padding:2px 8px;border-radius:4px;font-size:.72rem;flex-shrink:0;">${escapeHtml(cat)}</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:600;color:#222;margin-bottom:4px;">❓ ${escapeHtml(p.question || '')}</div>
+                            ${p.context ? '<div style="font-size:.82rem;color:#666;margin-bottom:6px;">💡 ' + escapeHtml(p.context) + '</div>' : ''}
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+                                <button type="button" class="btn btn-small btn-secondary edge-opt" data-idx="${i}" data-val="未明确，需产品确认" onclick="selectEdgeOption(this)">⏳ 待确认</button>
+                                <button type="button" class="btn btn-small btn-secondary edge-opt" data-idx="${i}" data-val="是，按通用处理" onclick="selectEdgeOption(this)">✅ 按通用</button>
+                                <button type="button" class="btn btn-small btn-secondary edge-opt" data-idx="${i}" data-val="否，不需要此场景" onclick="selectEdgeOption(this)">❌ 不需要</button>
+                            </div>
+                            <textarea data-idx="${i}" class="edge-custom" placeholder="或自定义回答..." rows="2" style="width:100%;margin-top:6px;padding:6px 8px;font-family:inherit;font-size:.85rem;border:1px solid #ddd;border-radius:4px;resize:vertical;display:none;"></textarea>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+
+        modal.innerHTML = `
+            <div style="background:#fff;border-radius:12px;max-width:780px;width:92%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,.3);">
+                <div style="padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-weight:700;font-size:1.1rem;">💬 需求边界确认</div>
+                        <div style="font-size:.82rem;color:#666;margin-top:2px;">AI 识别到 ${ctx.points.length} 个需要确认的边界点，请逐条作答</div>
+                    </div>
+                    <button onclick="closeEdgeConfirmDialog()" style="background:transparent;border:none;font-size:24px;cursor:pointer;color:#888;line-height:1;">&times;</button>
+                </div>
+                ${ctx.summary ? '<div style="padding:10px 20px;background:#e3f2fd;border-left:4px solid #1976d2;font-size:.88rem;color:#0d47a1;">📌 ' + escapeHtml(ctx.summary) + '</div>' : ''}
+                <div style="padding:16px 20px;overflow:auto;flex:1;">
+                    ${pointsHtml}
+                    <div style="margin-top:10px;">
+                        <div style="font-weight:600;color:#444;font-size:.9rem;margin-bottom:4px;">📝 还有别的补充吗？（可选）</div>
+                        <textarea id="edge-extra" rows="2" placeholder="其他想到的业务规则、边界条件..." style="width:100%;font-family:inherit;font-size:.88rem;padding:8px;border:1px solid #ddd;border-radius:6px;resize:vertical;"></textarea>
+                    </div>
+                </div>
+                <div style="padding:14px 20px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center;background:#fafafa;border-radius:0 0 12px 12px;">
+                    <label style="font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                        <input type="checkbox" id="edge-skip-default" checked>
+                        <span>未作答的视为「按通用处理」</span>
+                    </label>
+                    <div>
+                        <button class="btn btn-secondary" onclick="closeEdgeConfirmDialog()">取消</button>
+                        <button class="btn btn-primary" id="edge-confirm-btn" onclick="confirmEdgeAndSubmit()" style="margin-left:8px;">✅ 确认并生成测试用例</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        // Click outside to close
+        modal.addEventListener('click', function(ev) {
+            if (ev.target === modal) closeEdgeConfirmDialog();
+        });
+        // Esc to close
+        document.addEventListener('keydown', _edgeEscHandler);
+    }
+
+    function _edgeEscHandler(ev) {
+        if (ev.key === 'Escape') closeEdgeConfirmDialog();
+    }
+
+    function selectEdgeOption(btn) {
+        const idx = btn.dataset.idx;
+        // Reset siblings
+        btn.parentElement.querySelectorAll('.edge-opt').forEach(b => {
+            b.classList.remove('btn-primary');
+            b.classList.add('btn-secondary');
+        });
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+        // If "自定义" needed, show textarea
+        // Hide any visible custom textarea for this index
+        document.querySelectorAll('.edge-custom').forEach(ta => {
+            if (ta.dataset.idx === idx) ta.style.display = 'none';
+        });
+    }
+
+    // Allow user to type custom answer in textarea too (no button needed)
+    document.addEventListener('input', function(ev) {
+        if (ev.target && ev.target.classList && ev.target.classList.contains('edge-custom')) {
+            // Just allow free text; no need to toggle buttons
+        }
+    });
+
+    function closeEdgeConfirmDialog() {
+        const m = document.getElementById('edge-confirm-modal');
+        if (m) m.remove();
+        document.removeEventListener('keydown', _edgeEscHandler);
+    }
+
+    async function confirmEdgeAndSubmit() {
+        const points = (window._lastEdgePoints || []);
+        const skipDefault = !!document.getElementById('edge-skip-default')?.checked;
+        const extra = (document.getElementById('edge-extra')?.value || '').trim();
+
+        const confirmations = [];
+        for (let i = 0; i < points.length; i++) {
+            const q = points[i].question;
+            // Check if user picked a button
+            const sel = document.querySelector('.edge-opt[data-idx="' + i + '"].btn-primary');
+            let answer = '';
+            if (sel) {
+                answer = sel.dataset.val;
+            } else {
+                // Check custom textarea
+                const ta = document.querySelector('.edge-custom[data-idx="' + i + '"]');
+                if (ta && ta.value.trim()) {
+                    answer = ta.value.trim();
+                    ta.style.display = 'block';
+                }
+            }
+            if (!answer) {
+                answer = skipDefault ? '按通用处理' : '未明确，需产品确认';
+            }
+            confirmations.push({ question: q, answer: answer });
+        }
+
+        // Append extra as a synthetic question
+        if (extra) {
+            confirmations.push({ question: '[用户补充]', answer: extra });
+        }
+
+        closeEdgeConfirmDialog();
+        await submitRequirement(confirmations);
+    }
+
+    async function submitRequirement(edgeConfirmations) {
         const requirement = document.getElementById('requirement-input').value.trim();
         if (!requirement) return alert('请输入需求');
 
@@ -515,6 +698,7 @@
                     auto_context: autoContext,
                     frontend_context: selectedFE,
                     backend_context: selectedBE,
+                    edge_confirmations: edgeConfirmations || [],
                 })
             });
             const result = await response.json();
