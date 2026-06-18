@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 测试工程师 - 多智能体协作系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 1360px; margin: 0 auto; }
+        .header { text-align: center; color: white; margin-bottom: 26px; }
+        .header h1 { font-size: 2.4rem; margin-bottom: 8px; }
+        .header p { opacity: 0.9; }
+        .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; align-items: start; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .stats-bar { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-item {
+            flex: 1;
+            min-width: 140px;
+            background: rgba(255,255,255,0.16);
+            color: white;
+            padding: 14px 18px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(8px);
+        }
+        .stat-item .value { font-size: 1.7rem; font-weight: 800; }
+        .stat-item .label { font-size: 0.85rem; opacity: 0.9; }
+        textarea, input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+        textarea { min-height: 120px; resize: vertical; }
+        textarea:focus, input:focus, select:focus { outline: none; border-color: #667eea; }
+        .btn {
+            padding: 11px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 5px 18px rgba(102,126,234,.35); }
+        .btn-secondary { background: #f0f0f0; color: #555; }
+        .btn-small { padding: 6px 10px; font-size: .82rem; }
+        .btn-danger { background: #ffe5e8; color: #b00020; }
+        .row { display: flex; gap: 10px; align-items: center; }
+        .row > * { flex: 1; }
+        .workflow-status { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .stage { padding: 7px 14px; border-radius: 999px; font-size: .83rem; font-weight: 600; }
+        .stage.pending { background: #f0f0f0; color: #999; }
+        .stage.active { background: #fff3cd; color: #856404; }
+        .stage.done { background: #d4edda; color: #155724; }
+        .stage.error { background: #f8d7da; color: #721c24; }
+        .agent-panel {
+            border: 1px solid #ececec;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+        .agent-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .agent-head h3 { font-size: 1rem; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #eef2ff; color: #4f46e5; font-size: .78rem; font-weight: 700; }
+        .search-results { max-height: 320px; overflow: auto; border: 1px solid #eee; border-radius: 8px; margin-top: 10px; }
+        .knowledge-item { padding: 12px; border-bottom: 1px solid #eee; }
+        .knowledge-item:last-child { border-bottom: none; }
+        .knowledge-item .name { font-weight: 700; color: #222; margin-bottom: 4px; }
+        .knowledge-item .meta { color: #777; font-size: .84rem; line-height: 1.45; }
+        .knowledge-item .actions { margin-top: 8px; }
+        .selected-box { background: #f8f9ff; border: 1px dashed #9aa8ff; border-radius: 8px; padding: 10px; min-height: 44px; margin-top: 10px; }
+        .chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px; padding: 6px 10px; border-radius: 999px; background: #e8f5e9; color: #1b5e20; font-size: .82rem; }
+        .chip button { border: none; background: transparent; color: #1b5e20; cursor: pointer; font-weight: 800; }
+        .questions-section { background: #fff3cd; border: 1px solid #ffc107; border-radius: 10px; padding: 18px; margin-bottom: 20px; display: none; }
+        .question-item { background: white; padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+        .loading { display: none; text-align: center; padding: 20px; color: white; }
+        .loading.show { display: block; }
+        .spinner { border: 3px solid rgba(255,255,255,.35); border-top: 3px solid white; border-radius: 50%; width: 38px; height: 38px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        .thinking-panel { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; min-height: 32px; }
+        .step-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: .82rem; font-weight: 600; }
+        .step-chip.q { background: #fef3c7; color: #92400e; }
+        .step-chip.e { background: #d1fae5; color: #065f46; }
+        .step-chip.ev { background: #ede9fe; color: #5b21b6; }
+        .challenge-item { background: #fef9ee; border: 1px solid #f0dca0; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+        .challenge-q { margin-bottom: 8px; }
+        .challenge-badge { display: inline-block; background: #e74c3c; color: white; padding: 3px 8px; border-radius: 4px; font-size: .75rem; font-weight: 700; margin-right: 8px; }
+        .challenge-text { color: #333; font-weight: 600; }
+        .challenge-a { background: #e8f5e9; border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+        .response-label { font-weight: 700; color: #2e7d32; margin-right: 6px; }
+        .response-text { color: #333; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        pre { background: #2d2d2d; color: #f8f8f2; padding: 14px; border-radius: 8px; overflow: auto; max-height: 420px; font-size: .84rem; line-height: 1.5; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .tab { border: none; background: #f0f0f0; padding: 8px 12px; border-radius: 7px; cursor: pointer; font-weight: 600; }
+        .tab.active { background: #667eea; color: white; }
+        .hint { color: #777; font-size: .86rem; line-height: 1.5; margin-top: 8px; }
+        .test-case { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+        .test-case-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .test-case-title { font-weight: 700; font-size: 1.05rem; color: #333; }
+        .priority-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: .75rem; font-weight: 700; color: white; }
+        .priority-high { background: #dc3545; }
+        .priority-medium { background: #fd7e14; }
+        .priority-low { background: #28a745; }
+        .test-steps { margin: 10px 0 10px 20px; }
+        .test-step { padding: 8px 10px; border-left: 3px solid #667eea; margin-bottom: 8px; background: white; border-radius: 0 6px 6px 0; }
+        .step-num { display: inline-block; width: 22px; height: 22px; background: #667eea; color: white; border-radius: 50%; text-align: center; line-height: 22px; font-size: .78rem; font-weight: 700; margin-right: 8px; }
+        .step-action { color: #333; margin-bottom: 4px; }
+        .step-expected { color: #666; font-size: .88rem; }
+        .evidence-section { margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 8px; }
+        .evidence-title { font-weight: 700; color: #856404; margin-bottom: 8px; font-size: .9rem; }
+        .evidence-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; background: white; border-radius: 6px; margin-bottom: 6px; border: 1px solid #ffeeba; }
+        .evidence-type { display: inline-block; padding: 2px 6px; border-radius: 3px; background: #5b21b6; color: white; font-size: .7rem; font-weight: 700; min-width: 70px; text-align: center; }
+        .evidence-ref { color: #4f46e5; font-weight: 600; font-size: .82rem; }
+        .evidence-content { color: #333; font-size: .85rem; flex: 1; }
+        .suite-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 14px; border-radius: 8px 8px 0 0; font-weight: 700; }
+        .suite-name { font-size: 1.1rem; }
+        .suite-id { font-size: .8rem; opacity: 0.85; }
+        .suite-cases { padding: 10px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; margin-bottom: 16px; }
+        .upload-area { border: 2px dashed #ccc; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all .2s; }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #667eea; background: #eef2ff; }
+        .upload-hint { color: #666; }
+        .doc-result-item { padding: 12px; border-bottom: 1px solid #eee; }
+        .doc-result-item:last-child { border-bottom: none; }
+        .doc-filename { font-weight: 700; color: #333; margin-bottom: 4px; }
+        .doc-meta { color: #777; font-size: .8rem; }
+        .doc-snippet { background: #f5f5f5; padding: 8px; border-radius: 6px; margin-top: 8px; font-size: .85rem; color: #555; }
+        .doc-matched { background: #fff3cd; padding: 0 4px; }
+        .explorer-card { border: 2px solid #667eea; background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%); }
+        .explorer-card .card-title { color: #667eea; }
+        @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🤖 AI 测试工程师</h1>
+        <p>PM / FE / BE / QA 多智能体协作 · 可选知识库上下文 · 证据链追踪</p>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat-item"><div class="value" id="stat-components">0</div><div class="label">前端组件知识库</div></div>
+        <div class="stat-item"><div class="value" id="stat-apis">0</div><div class="label">后端 API 知识库</div></div>
+        <div class="stat-item"><div class="value" id="stat-services">0</div><div class="label">后端服务</div></div>
+        <div class="stat-item"><div class="value" id="stat-testcases">0</div><div class="label">测试用例</div></div>
+    </div>
+
+    <div class="grid">
+        <div>
+            <div class="card">
+                <div class="card-title">📝 需求输入与智能体流程</div>
+                <div class="workflow-status">
+                    <span class="stage pending" data-stage="pm">PM 解析</span>
+                    <span class="stage pending" data-stage="fe_be">FE/BE 分析</span>
+                    <span class="stage pending" data-stage="qa">QA 评审</span>
+                    <span class="stage pending" data-stage="done">完成</span>
+                </div>
+                <textarea id="requirement-input" placeholder="例如：在上报管理模块中新增一个媒体平台选项：谷歌分析(Google Analytics)，需要支持 pageview 和 user properties 上报。"></textarea>
+                <div class="hint">提示：先在右侧 FE/BE 知识库中搜索并“加入本次需求”，系统会把这些组件/API作为证据上下文交给智能体。</div>
+                <div class="row" style="margin-top: 14px;">
+                    <button class="btn btn-primary" id="btn-submit" onclick="submitRequirement()">生成测试用例</button>
+                    <button class="btn btn-secondary" onclick="resetContext()">清空本次上下文</button>
+                </div>
+            </div>
+
+            <div class="loading" id="loading"><div class="spinner"></div><p>AI 智能体正在分析知识库与需求...</p></div>
+
+            <div class="questions-section" id="questions-section">
+                <h3>❓ 需要澄清的问题</h3>
+                <div id="questions-list"></div>
+                <button class="btn btn-primary" onclick="submitClarifications()">提交回答并继续</button>
+            </div>
+
+            <div id="result-section" style="display:none;">
+                <div id="challenges-section" class="card" style="display:none;">
+                    <div class="card-title">🔄 质询与回应过程</div>
+                    <div id="challenges-list"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">📋 PM 需求解析</div>
+                    <div id="pm-thinking" class="thinking-panel"></div>
+                    <pre id="pm-result"></pre>
+                </div>
+                <div class="card">
+                    <div class="card-title">🎨 FE 前端分析结果</div>
+                    <div id="fe-thinking" class="thinking-panel"></div>
+                    <pre id="fe-result"></pre>
+                </div>
+                <div class="card">
+                    <div class="card-title">⚙️ BE 后端分析结果</div>
+                    <div id="be-thinking" class="thinking-panel"></div>
+                    <pre id="be-result"></pre>
+                </div>
+                <div class="card">
+                    <div class="card-title">🧪 QA 测试用例与证据链</div>
+                    <div id="qa-thinking" class="thinking-panel"></div>
+                    <pre id="testcases-result"></pre>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="card">
+                <div class="card-title">🧠 补充说明 / 知识库上下文（自动）</div>
+                <div style="background:#e8f5e9;border-left:4px solid #43a047;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;color:#1b5e20;">
+                    <div style="font-weight:700;margin-bottom:6px;">📖 怎么用</div>
+                    <ul style="margin:0;padding-left:18px;line-height:1.7;">
+                        <li><strong>自动匹配</strong>：默认开启。提交需求时，系统会按关键字从 FE/BE 知识库自动挑选相关组件/API/服务/实体，作为上下文喂给智能体</li>
+                        <li><strong>人工补充</strong>：下方文本框里用自然语言写「业务规则/边界条件/特殊逻辑/已有约束」等，AI 会把它写进证据链</li>
+                    </ul>
+                </div>
+
+                <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center;">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.9rem;">
+                        <input type="checkbox" id="auto-context-toggle" checked>
+                        <span>🤖 自动从 FE/BE 知识库匹配上下文</span>
+                    </label>
+                    <button class="btn btn-secondary" onclick="previewAutoContext()">👀 预览匹配结果</button>
+                </div>
+
+                <div style="margin-top:10px;">
+                    <div style="font-weight:600;color:#444;font-size:.9rem;margin-bottom:4px;">📝 人工补充说明（可选）</div>
+                    <textarea id="extra-notes" rows="3" placeholder="例：&#10;- 用户名长度 3-20 位，仅允许字母数字下划线&#10;- 连续 5 次密码错误锁定账号 30 分钟&#10;- 上报接口 QPS 限制 100/s，超出返回 429&#10;- 业务规则：报表页只允许查看自己部门的数据，跨部门需要二级审批" style="width:100%;font-family:inherit;font-size:.88rem;padding:8px;border:1px solid #ddd;border-radius:6px;resize:vertical;"></textarea>
+                </div>
+
+                <div id="auto-context-preview" style="margin-top:10px;display:none;"></div>
+
+                <details style="margin-top:14px;">
+                    <summary style="cursor:pointer;color:#1976d2;font-size:.88rem;user-select:none;">🔧 高级：手动选择知识库条目（可选）</summary>
+                    <div style="margin-top:8px;background:#fafafa;border-radius:6px;padding:10px;">
+                        <div class="agent-panel">
+                            <div class="agent-head">
+                                <h3>🎨 FE 前端知识库</h3>
+                                <span class="badge">组件 / props / imports</span>
+                            </div>
+                            <div class="row">
+                                <input id="fe-search" placeholder="搜索前端组件，如 report、google、tracking、上报">
+                                <button class="btn btn-secondary" onclick="searchAgentKnowledge('fe')">搜索 FE</button>
+                            </div>
+                            <div id="fe-results" class="search-results"></div>
+                            <div class="selected-box">
+                                <strong>已给 FE 的上下文：</strong>
+                                <div id="selected-fe"></div>
+                            </div>
+                        </div>
+
+                        <div class="agent-panel">
+                            <div class="agent-head">
+                                <h3>⚙️ BE 后端知识库</h3>
+                                <span class="badge">API / Service / Entity</span>
+                            </div>
+                            <div class="row">
+                                <input id="be-search" placeholder="搜索后端 API/服务/实体，如 report、media、google、上报">
+                                <select id="be-type" style="max-width: 120px;">
+                                    <option value="all">全部</option>
+                                    <option value="apis">API</option>
+                                    <option value="services">服务</option>
+                                    <option value="entities">实体</option>
+                                </select>
+                                <button class="btn btn-secondary" onclick="searchAgentKnowledge('be')">搜索 BE</button>
+                            </div>
+                            <div id="be-results" class="search-results"></div>
+                            <div class="selected-box">
+                                <strong>已给 BE 的上下文：</strong>
+                                <div id="selected-be"></div>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📂 前端源码知识库</div>
+                <p style="font-size:.85rem;color:#666;margin-bottom:10px;">
+                    浏览已索引的前端组件，按项目/类型/关键字筛选，查看 props/imports/API 调用，附源码预览
+                </p>
+                <div class="row" style="flex-wrap:wrap;gap:8px;">
+                    <select id="sc-project" style="max-width:220px;"><option value="">全部项目</option></select>
+                    <select id="sc-type" style="max-width:140px;"><option value="">全部类型</option></select>
+                    <input id="sc-query" placeholder="按组件名/路径搜索" style="flex:1;min-width:200px;">
+                    <button class="btn btn-secondary" onclick="loadSourceCodeList()">🔍 搜索</button>
+                    <button class="btn btn-secondary" onclick="resetSourceCodeFilter()">重置</button>
+                </div>
+                <div id="sc-stats" style="margin-top:8px;font-size:.85rem;color:#666;"></div>
+                <div id="sc-list" style="margin-top:10px;max-height:420px;overflow:auto;"></div>
+                <div id="sc-detail" style="margin-top:12px;display:none;"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🛠️ 后端源码知识库</div>
+                <p style="font-size:.85rem;color:#666;margin-bottom:10px;">
+                    浏览已索引的后端 API/Service/Entity/Repository，按类型和关键字筛选，附源码预览
+                </p>
+                <div class="tabs" id="scbe-tabs">
+                    <button class="tab active" data-cat="apis" onclick="setBECategory(event, 'apis')">⚙️ API</button>
+                    <button class="tab" data-cat="services" onclick="setBECategory(event, 'services')">🧩 Service</button>
+                    <button class="tab" data-cat="entities" onclick="setBECategory(event, 'entities')">📦 Entity</button>
+                    <button class="tab" data-cat="repositories" onclick="setBECategory(event, 'repositories')">🗄️ Repository</button>
+                </div>
+                <div class="row" style="flex-wrap:wrap;gap:8px;">
+                    <select id="scbe-method" style="max-width:120px;display:none;">
+                        <option value="">全部方法</option>
+                        <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option>
+                    </select>
+                    <input id="scbe-query" placeholder="按路径/类名/方法名/表名搜索" style="flex:1;min-width:200px;">
+                    <button class="btn btn-secondary" onclick="loadBELibraryList()">🔍 搜索</button>
+                    <button class="btn btn-secondary" onclick="resetBEFilter()">重置</button>
+                </div>
+                <div id="scbe-meta" style="margin-top:8px;font-size:.85rem;color:#666;"></div>
+                <div id="scbe-list" style="margin-top:10px;max-height:420px;overflow:auto;"></div>
+                <div id="scbe-detail" style="margin-top:12px;display:none;"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 通用知识库搜索</div>
+                <div class="tabs">
+                    <button class="tab active" onclick="setSearchType(event, 'all')">全部</button>
+                    <button class="tab" onclick="setSearchType(event, 'components')">组件</button>
+                    <button class="tab" onclick="setSearchType(event, 'apis')">API</button>
+                    <button class="tab" onclick="setSearchType(event, 'services')">服务</button>
+                    <button class="tab" onclick="setSearchType(event, 'entities')">实体</button>
+                </div>
+                <div class="row">
+                    <input type="text" id="search-input" placeholder="搜索组件/API/Service/Entity" onkeypress="if(event.key==='Enter') searchKnowledge()">
+                    <button class="btn btn-secondary" onclick="searchKnowledge()">搜索</button>
+                </div>
+                <div id="search-results" class="search-results" style="margin-top: 10px;"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📊 存储统计</div>
+                <div id="storage-stats"></div>
+                <button class="btn btn-secondary" onclick="loadStats()" style="margin-top:10px;">刷新</button>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 自动化系统探索与功能映射</div>
+                <p style="font-size:.88rem;color:#666;margin-bottom:12px;">
+                    自动遍历目标系统（Web应用）的所有页面和功能点，构建功能全景图
+                </p>
+                <div class="row">
+                    <input type="text" id="explorer-url" value="https://dbq.asptest.yiye.ai/pmp/landing-page?type=pmp&advertiserGroupId=113" placeholder="输入目标URL，如 http://localhost:3000" style="flex:2;">
+                    <select id="explorer-engine" style="max-width:140px;">
+                        <option value="puppeteer" selected>Puppeteer</option>
+                        <option value="playwright">Playwright</option>
+                        <option value="selenium">Selenium</option>
+                        <option value="simple">简单模式</option>
+                    </select>
+                    <select id="explorer-mode" style="max-width:120px;margin-left:8px;">
+                        <option value="action">按元素探索</option>
+                        <option value="menu" selected>菜单优先</option>
+                    </select>
+                </div>
+                <div style="margin-top:10px;">
+                    <input type="number" id="explorer-depth" value="3" min="1" max="10" style="width:60px;" title="探索深度">
+                    <span style="color:#666;font-size:.85rem;">深度 (1-10)</span>
+                    <input type="number" id="explorer-pages" value="50" min="10" max="500" style="width:60px;margin-left:15px;" title="最大页面数">
+                    <span style="color:#666;font-size:.85rem;">最大页面 (10-500)</span>
+                </div>
+                <div style="margin-top:10px;">
+                    <input type="number" id="explorer-states" value="30" min="1" max="50" style="width:60px;" title="最大UI状态">
+                    <span style="color:#666;font-size:.85rem;">最大状态</span>
+                    <input type="number" id="explorer-actions" value="12" min="1" max="20" style="width:60px;margin-left:15px;" title="每状态最大动作">
+                    <span style="color:#666;font-size:.85rem;">每状态动作</span>
+                    <label style="margin-left:15px;color:#666;font-size:.85rem;"><input type="checkbox" id="explorer-safe-mode" checked> 安全模式（跳过新增/保存/删除/提交等操作）</label>
+                    <label style="margin-left:15px;color:#666;font-size:.85rem;"><input type="checkbox" id="explorer-headless" checked> 显示浏览器（可视化）</label>
+                </div>
+                <div style="margin-top:10px;">
+                    <input type="text" id="explorer-jwt" placeholder="JWT (可选, Bearer token, 留空走 storage_state)" style="width:60%;font-family:monospace;">
+                    <button class="btn btn-secondary" id="btn-save-jwt" style="margin-left:8px;" onclick="saveJwt()">💾 保存 JWT</button>
+                </div>
+                <div style="margin-top:10px;">
+                    <input type="text" id="explorer-cookie-name" placeholder="Cookie 名（默认 Admin-Token）" style="width:25%;" oninput="saveCookieToStorage()">
+                    <input type="text" id="explorer-cookie-value" placeholder="Cookie 值" style="width:50%;font-family:monospace;margin-left:8px;" oninput="saveCookieToStorage()">
+                    <button class="btn btn-secondary" id="btn-save-cookie" style="margin-left:8px;" onclick="saveCookie()">🍪 保存 Cookie</button>
+                </div>
+                <button class="btn btn-primary" id="btn-explore" onclick="startExploration()" style="margin-top:12px;">🚀 开始探索</button>
+                <button class="btn btn-secondary" id="btn-explore-manual" onclick="startManualExploration()" style="margin-top:12px;margin-left:8px;">🖱️ 手动模式</button>
+                <button class="btn btn-secondary" id="btn-login-helper" onclick="startLoginHelper()" style="margin-top:12px;margin-left:8px;">👤 手动登录</button>
+                <button class="btn btn-secondary" id="btn-analysis-history" onclick="showAnalysisHistory()" style="margin-top:12px;margin-left:8px;">📚 分析历史</button>
+                <button class="btn btn-secondary" id="btn-analysis-detail" onclick="promptAnalysisDetail()" style="margin-top:12px;margin-left:8px;">📋 分析详情</button>
+                <div id="explorer-results" style="margin-top:12px;"></div>
+                <div id="manual-session-card" style="display:none;margin-top:12px;"></div>
+            </div>
+
+            <div class="card" id="login-helper-card" style="display:none;">
+                <div class="card-title">🔐 正在登录…</div>
+                <p style="font-size:.88rem;color:#666;margin-bottom:12px;">
+                    浏览器已打开，请在弹出的窗口中完成登录（OAuth / SSO / 2FA / 账密），然后点击下方按钮。
+                </p>
+                <button class="btn btn-primary" id="btn-login-done" onclick="finishLoginHelper()">✅ 我已登录完成</button>
+                <button class="btn btn-secondary" id="btn-login-cancel" style="margin-left:8px;" onclick="cancelLoginHelper()">取消</button>
+                <div id="login-helper-status" style="margin-top:10px;font-size:.85rem;color:#666;"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📄 文档上传到知识库</div>
+                <div class="upload-area" id="upload-area">
+                    <input type="file" id="doc-file" accept=".txt,.md,.pdf,.docx,.json,.yaml,.yml,.xml,.html,.htm" style="display:none;" onchange="handleFileSelect(event)">
+                    <div class="upload-hint" onclick="document.getElementById('doc-file').click()">
+                        <div style="font-size:2rem;margin-bottom:8px;">📁</div>
+                        <div>点击选择文件或拖拽到此处</div>
+                        <div style="font-size:.8rem;color:#888;margin-top:4px;">支持: TXT, MD, PDF, DOCX, JSON, YAML, XML, HTML</div>
+                    </div>
+                    <div id="upload-preview" style="display:none;"></div>
+                </div>
+                <button class="btn btn-primary" id="btn-upload" onclick="uploadDocument()" disabled style="margin-top:10px;">上传并索引</button>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📚 文档知识库搜索</div>
+                <div class="row">
+                    <input type="text" id="doc-search-input" placeholder="搜索上传的文档内容" onkeypress="if(event.key==='Enter') searchDocuments()">
+                    <button class="btn btn-secondary" onclick="searchDocuments()">搜索</button>
+                </div>
+                <div id="doc-search-results" class="search-results" style="margin-top:10px;"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📋 系统日志</div>
+                <div class="row" style="margin-bottom:10px;">
+                    <input type="text" id="log-search" placeholder="搜索日志内容" style="flex:2;">
+                    <select id="log-level" style="max-width:100px;">
+                        <option value="">全部级别</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:10px;">
+                    <button class="btn btn-secondary" onclick="loadLogs()">🔄 刷新日志</button>
+                    <button class="btn btn-secondary" onclick="clearLogs()">🗑️ 清空日志</button>
+                    <select id="log-lines" style="width:80px;">
+                        <option value="50">50行</option>
+                        <option value="100" selected>100行</option>
+                        <option value="200">200行</option>
+                        <option value="500">500行</option>
+                    </select>
+                </div>
+                <div id="log-viewer" style="background:#1e1e1e;color:#0f0;padding:10px;border-radius:8px;max-height:300px;overflow:auto;font-family:monospace;font-size:.78rem;line-height:1.4;">
+                    <div style="color:#666;">点击"刷新日志"加载日志内容</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedFE = [];
+    let selectedBE = [];
+    let activeSearchType = 'all';
+    let currentQuestions = [];
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    }
+
+
+    function updateStage(stage, status) {
+        const el = document.querySelector(`[data-stage="${stage}"]`);
+        if (el) el.className = `stage ${status}`;
+    }
+
+    function setLoading(show) {
+        document.getElementById('loading').classList.toggle('show', show);
+        document.getElementById('btn-submit').disabled = show;
+    }
+
+    function resetStages() {
+        ['pm','fe_be','qa','done'].forEach(s => updateStage(s, 'pending'));
+    }
+
+    async function submitRequirement() {
+        const requirement = document.getElementById('requirement-input').value.trim();
+        if (!requirement) return alert('请输入需求');
+
+        const extraNotes = (document.getElementById('extra-notes')?.value || '').trim();
+        const autoContext = !!document.getElementById('auto-context-toggle')?.checked;
+
+        setLoading(true);
+        resetStages();
+        updateStage('pm', 'active');
+        document.getElementById('questions-section').style.display = 'none';
+
+        try {
+            const response = await fetch('/api/requirement', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    requirement,
+                    extra_notes: extraNotes,
+                    auto_context: autoContext,
+                    frontend_context: selectedFE,
+                    backend_context: selectedBE,
+                })
+            });
+            const result = await response.json();
+            if (result.status === 'needs_clarification') {
+                updateStage('pm', 'done');
+                showQuestions(result.questions || []);
+            } else if (result.status === 'success') {
+                updateStage('pm', 'done');
+                updateStage('fe_be', 'done');
+                updateStage('qa', 'done');
+                updateStage('done', 'done');
+                showResults(result);
+            } else {
+                updateStage('pm', 'error');
+                alert('错误：' + (result.error || '未知错误'));
+            }
+        } catch (error) {
+            updateStage('pm', 'error');
+            alert('请求失败：' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function showQuestions(questions) {
+        currentQuestions = questions;
+        const list = document.getElementById('questions-list');
+        list.innerHTML = questions.map((q, i) => `
+            <div class="question-item">
+                <p><strong>问题 ${i + 1}：</strong>${escapeHtml(q)}</p>
+                <input id="answer-${i}" placeholder="请输入回答">
+            </div>
+        `).join('');
+        document.getElementById('questions-section').style.display = 'block';
+    }
+
+    async function submitClarifications() {
+        const answers = currentQuestions.map((question, i) => ({
+            question,
+            answer: document.getElementById(`answer-${i}`).value.trim(),
+        })).filter(a => a.answer);
+        if (!answers.length) return alert('请至少填写一个回答');
+
+        setLoading(true);
+        try {
+            const response = await fetch('/api/clarification', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({answers})
+            });
+            const result = await response.json();
+            if (result.status === 'needs_clarification') showQuestions(result.questions || []);
+            else showResults(result);
+        } catch (error) {
+            alert('提交失败：' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function previewAutoContext() {
+        const requirement = document.getElementById('requirement-input').value.trim();
+        if (!requirement) {
+            alert('请先在顶部「需求描述」框中输入需求文本');
+            return;
+        }
+        const target = document.getElementById('auto-context-preview');
+        target.style.display = 'block';
+        target.innerHTML = '<div style="color:#667eea;">🤖 正在匹配知识库…</div>';
+        try {
+            const resp = await fetch('/api/requirement/auto-context', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requirement })
+            });
+            const data = await resp.json();
+            if (data.error) {
+                target.innerHTML = '<div style="color:#f00;">匹配失败: ' + escapeHtml(data.error) + '</div>';
+                return;
+            }
+            const fe = data.frontend || [];
+            const be = data.backend || [];
+            let html = '<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:12px;">';
+            html += '<div style="font-weight:700;margin-bottom:8px;">🤖 自动匹配结果</div>';
+            html += '<div style="font-size:.85rem;color:#555;margin-bottom:8px;">系统将根据你的需求文本自动挑选这些条目作为 FE/BE 上下文（提交需求时生效）</div>';
+
+            html += '<details open><summary style="cursor:pointer;font-weight:600;color:#1976d2;">🎨 FE 组件 (' + fe.length + ')</summary>';
+            if (fe.length === 0) html += '<div style="color:#888;padding:6px 0;">未匹配到</div>';
+            for (const x of fe) {
+                const short = (x.file_path || '').replace(/^.*[\\/]/, '');
+                html += '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:.82rem;">'
+                    + '<span style="background:#e3f2fd;color:#1976d2;padding:1px 6px;border-radius:3px;font-size:.7rem;margin-right:6px;">' + escapeHtml(x.type || '') + '</span>'
+                    + '<strong>' + escapeHtml(x.name || '') + '</strong>'
+                    + ' <span style="color:#888;">(' + escapeHtml(x.project || '') + ')</span>'
+                    + ' <span style="color:#aaa;font-size:.75rem;margin-left:6px;">score=' + (x.score || 0) + '</span>'
+                    + '<div style="color:#888;font-size:.75rem;margin-top:1px;">📁 ' + escapeHtml(short) + '</div>'
+                    + '</div>';
+            }
+            html += '</details>';
+
+            html += '<details open style="margin-top:8px;"><summary style="cursor:pointer;font-weight:600;color:#43a047;">⚙️ BE API/Service/Entity (' + be.length + ')</summary>';
+            if (be.length === 0) html += '<div style="color:#888;padding:6px 0;">未匹配到</div>';
+            for (const x of be) {
+                let head = '';
+                if (x.type === 'api') {
+                    const m = x.method || '';
+                    const mColor = m === 'GET' ? '#43a047' : (m === 'POST' ? '#1976d2' : (m === 'DELETE' ? '#e53935' : '#fb8c00'));
+                    head = '<span style="background:' + mColor + ';color:#fff;padding:1px 6px;border-radius:3px;font-size:.7rem;margin-right:6px;">' + escapeHtml(m) + '</span>'
+                        + '<strong>' + escapeHtml(x.path || '') + '</strong>';
+                } else {
+                    head = '<span style="background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:3px;font-size:.7rem;margin-right:6px;">' + escapeHtml(x.type) + '</span>'
+                        + '<strong>' + escapeHtml(x.name || '') + '</strong>';
+                }
+                const sub = x.class_name ? ' <span style="color:#888;">[' + escapeHtml(x.class_name) + ']</span>' : '';
+                html += '<div style="padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:.82rem;">'
+                    + head + sub
+                    + ' <span style="color:#aaa;font-size:.75rem;margin-left:6px;">score=' + (x.score || 0) + '</span>'
+                    + '</div>';
+            }
+            html += '</details>';
+
+            html += '</div>';
+            target.innerHTML = html;
+        } catch (e) {
+            target.innerHTML = '<div style="color:#f00;">请求失败: ' + escapeHtml(e.message) + '</div>';
+        }
+    }
+
+    function showResults(result) {
+        document.getElementById('result-section').style.display = 'block';
+        document.getElementById('pm-result').textContent = JSON.stringify(result.pm_output || {}, null, 2);
+        document.getElementById('fe-result').textContent = JSON.stringify(result.fe_output || result.selected_frontend_context || {}, null, 2);
+        document.getElementById('be-result').textContent = JSON.stringify(result.be_output || result.selected_backend_context || {}, null, 2);
+
+        // Show auto-match stats if present
+        const auto = result.auto_matched;
+        if (auto && (auto.frontend_count || auto.backend_count)) {
+            const note = document.createElement('div');
+            note.style.cssText = 'background:#e8f5e9;border-left:4px solid #43a047;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.85rem;color:#1b5e20;';
+            note.innerHTML = '🤖 自动从知识库匹配: FE <strong>' + auto.frontend_count + '</strong> 条 / BE <strong>' + auto.backend_count + '</strong> 条';
+            const rs = document.getElementById('result-section');
+            if (rs && rs.firstChild) rs.insertBefore(note, rs.firstChild);
+        }
+
+        // Render test cases with proper formatting
+        renderTestCases(result.test_cases);
+
+        // Show thinking panels
+        renderThinking('pm', result.pm_thinking);
+        renderThinking('fe', result.fe_thinking);
+        renderThinking('be', result.be_thinking);
+        renderThinking('qa', result.qa_thinking);
+
+        // Show challenges and responses
+        renderChallengesResponses(result.challenges, result.responses);
+
+        loadStats();
+    }
+
+    function renderTestCases(testCases) {
+        const container = document.getElementById('testcases-result');
+        if (!container) return;
+
+        if (!testCases || (!testCases.test_suites && !testCases.test_plan)) {
+            container.textContent = JSON.stringify(testCases || {}, null, 2);
+            return;
+        }
+
+        let html = '';
+
+        // Render test plan summary if available
+        if (testCases.test_plan) {
+            html += `<div style="background:#eef2ff;padding:14px;border-radius:8px;margin-bottom:16px;">
+                <div style="font-weight:700;color:#3730a3;margin-bottom:8px;">📋 ${escapeHtml(testCases.test_plan.test_plan_id || 'Test Plan')} - ${escapeHtml(testCases.test_plan.summary || 'Test Summary')}</div>
+                <div style="font-size:.88rem;color:#666;">Scope: ${escapeHtml(testCases.test_plan.scope || 'N/A')}</div>
+            </div>`;
+        }
+
+        // Render test suites
+        const suites = testCases.test_suites || [];
+        for (const suite of suites) {
+            html += `<div class="suite">
+                <div class="suite-header">
+                    <div class="suite-name">📁 ${escapeHtml(suite.suite_name || suite.suite_id || 'Test Suite')}</div>
+                    <div class="suite-id">${escapeHtml(suite.suite_id || '')}</div>
+                </div>
+                <div class="suite-cases">`;
+
+            const cases = suite.test_cases || [];
+            for (const tc of cases) {
+                const priority = (tc.priority || 'medium').toLowerCase();
+                const priorityClass = priority === 'high' ? 'priority-high' : (priority === 'low' ? 'priority-low' : 'priority-medium');
+
+                html += `<div class="test-case">
+                    <div class="test-case-header">
+                        <span class="test-case-title">${escapeHtml(tc.title || tc.test_case_id || 'Untitled')}</span>
+                        <span class="priority-badge ${priorityClass}">${escapeHtml(priority.toUpperCase())}</span>
+                    </div>`;
+
+                // Render preconditions
+                if (tc.preconditions && tc.preconditions.length) {
+                    html += `<div style="margin-bottom:8px;font-size:.88rem;"><strong style="color:#666;">Preconditions:</strong> ${tc.preconditions.map(p => escapeHtml(p)).join(', ')}</div>`;
+                }
+
+                // Render test steps
+                if (tc.test_steps && tc.test_steps.length) {
+                    html += `<div class="test-steps">`;
+                    for (const step of tc.test_steps) {
+                        html += `<div class="test-step">
+                            <span class="step-num">${step.step_number || step.step_num || '?'}</span>
+                            <div class="step-action">${escapeHtml(step.action || '')}</div>
+                            <div class="step-expected">⇒ ${escapeHtml(step.expected_result || '')}</div>
+                        </div>`;
+                    }
+                    html += `</div>`;
+                }
+
+                // Render evidence chain
+                const evidence = tc.built_evidence_chain || tc.evidence_chain || {};
+                const evidenceItems = evidence.evidence_chain || evidence.evidence_items || [];
+                if (evidenceItems.length) {
+                    html += `<div class="evidence-section">
+                        <div class="evidence-title">🔗 Evidence Chain (${evidenceItems.length} items)</div>`;
+                    for (const ev of evidenceItems) {
+                        html += `<div class="evidence-item">
+                            <span class="evidence-type">${escapeHtml(ev.type || 'UNKNOWN')}</span>
+                            <span class="evidence-ref">${escapeHtml(ev.ref_id || '')}</span>
+                            <span class="evidence-content">${escapeHtml((ev.content || '').substring(0, 100))}${(ev.content || '').length > 100 ? '...' : ''}</span>
+                        </div>`;
+                    }
+                    html += `</div>`;
+                }
+
+                html += `</div>`;
+            }
+
+            html += `</div></div>`;
+        }
+
+        // Fallback to raw JSON if no suites
+        if (!suites.length) {
+            container.textContent = JSON.stringify(testCases || {}, null, 2);
+        } else {
+            container.innerHTML = html;
+        }
+    }
+
+    function renderChallengesResponses(challenges, responses) {
+        const section = document.getElementById('challenges-section');
+        const list = document.getElementById('challenges-list');
+        if (!section || !list) return;
+
+        challenges = challenges || [];
+        responses = responses || [];
+
+        if (!challenges.length) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        list.innerHTML = challenges.map((c, i) => {
+            const resp = responses.find(r => r.challenge_id === c.challenge_id);
+            const target = c.target || c.target_agent || 'unknown';
+            const responseHtml = (resp && resp.response)
+                ? '<div class="challenge-a"><span class="response-label">' + escapeHtml(target.toUpperCase()) + ' 回复:</span><span class="response-text">' + escapeHtml(resp.response) + '</span></div>'
+                : '<div class="challenge-a"><em style="color:#aaa;">等待回应...</em></div>';
+            return `
+                <div class="challenge-item">
+                    <div class="challenge-q">
+                        <span class="challenge-badge">${escapeHtml(target.toUpperCase())}</span>
+                        <span class="challenge-text">❓ ${escapeHtml(c.question || c.challenge || '')}</span>
+                    </div>
+                    ${responseHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderThinking(agent, thinking) {
+        const el = document.getElementById(`${agent}-thinking`);
+        if (!el) return;
+        if (!thinking || Object.keys(thinking).length === 0) {
+            el.innerHTML = '<p style="color:#aaa;font-size:.85rem;">暂无推理过程</p>';
+            return;
+        }
+        const steps = [];
+        if (thinking.action_plan) steps.push(...thinking.action_plan.map(a => `<span class="step-chip">📋 ${escapeHtml(a)}</span>`));
+        if (thinking.questions && thinking.questions.length) steps.push(...thinking.questions.map(q => `<span class="step-chip q">❓ ${escapeHtml(q.slice(0,60))}${q.length > 60 ? '…' : ''}</span>`));
+        if (thinking.entities_to_find && thinking.entities_to_find.length) steps.push(...thinking.entities_to_find.map(e => `<span class="step-chip e">🏷️ ${escapeHtml(e)}</span>`));
+        if (thinking.evidence_needed) steps.push(...thinking.evidence_needed.map(ev => `<span class="step-chip ev">🔗 ${escapeHtml(ev)}</span>`));
+        el.innerHTML = steps.length ? steps.join(' ') : '<p style="color:#aaa;font-size:.85rem;">暂无详细推理</p>';
+    }
+
+    async function searchAgentKnowledge(agent) {
+        const inputId = agent === 'fe' ? 'fe-search' : 'be-search';
+        const resultsId = agent === 'fe' ? 'fe-results' : 'be-results';
+        const query = document.getElementById(inputId).value.trim();
+        if (!query) return;
+
+        const type = agent === 'fe' ? 'components' : document.getElementById('be-type').value;
+        const data = await fetch(`/api/knowledge/search?q=${encodeURIComponent(query)}&type=${type}&limit=20`).then(r => r.json());
+        document.getElementById(resultsId).innerHTML = renderKnowledgeResults(data, agent);
+    }
+
+    function renderKnowledgeResults(data, targetAgent) {
+        const blocks = [];
+        if (data.components) blocks.push(...data.components.map(item => renderComponent(item, targetAgent)));
+        if (data.apis) blocks.push(...data.apis.map(item => renderApi(item, targetAgent)));
+        if (data.services) blocks.push(...data.services.map(item => renderService(item, targetAgent)));
+        if (data.entities) blocks.push(...data.entities.map(item => renderEntity(item, targetAgent)));
+        return blocks.length ? blocks.join('') : '<p style="padding:14px;color:#888;text-align:center;">未找到相关知识</p>';
+    }
+
+    function renderComponent(item, targetAgent) {
+        const c = item.component;
+        const payload = encodeURIComponent(JSON.stringify({type:'component', project:item.project, ...c}));
+        return `<div class="knowledge-item">
+            <div class="name">🎨 ${escapeHtml(c.name)}</div>
+            <div class="meta">${escapeHtml(item.project)} · ${escapeHtml(c.type)} · ${escapeHtml(c.file_path)}</div>
+            <div class="meta">props: ${(c.props || []).slice(0,6).map(escapeHtml).join(', ') || '无'}</div>
+            <div class="actions"><button class="btn btn-small btn-primary" onclick="addKnowledge('${targetAgent}', '${payload}')">加入本次需求</button></div>
+        </div>`;
+    }
+
+    function renderApi(item, targetAgent) {
+        const a = item.api;
+        const payload = encodeURIComponent(JSON.stringify({type:'api', ...a}));
+        return `<div class="knowledge-item">
+            <div class="name">⚙️ ${escapeHtml(a.method)} ${escapeHtml(a.path)}</div>
+            <div class="meta">${escapeHtml(a.class_name)}.${escapeHtml(a.method_name)} · ${escapeHtml(a.file_path)}</div>
+            <div class="meta">request: ${escapeHtml(a.request_body || '-')} · response: ${escapeHtml(a.response_type || '-')}</div>
+            <div class="actions"><button class="btn btn-small btn-primary" onclick="addKnowledge('${targetAgent}', '${payload}')">加入本次需求</button></div>
+        </div>`;
+    }
+
+    function renderService(item, targetAgent) {
+        const s = item.service;
+        const payload = encodeURIComponent(JSON.stringify({type:'service', ...s}));
+        return `<div class="knowledge-item">
+            <div class="name">🧩 ${escapeHtml(s.name)}</div>
+            <div class="meta">${escapeHtml(s.file_path)}</div>
+            <div class="meta">methods: ${(s.methods || []).slice(0,8).map(escapeHtml).join(', ')}</div>
+            <div class="actions"><button class="btn btn-small btn-primary" onclick="addKnowledge('${targetAgent}', '${payload}')">加入本次需求</button></div>
+        </div>`;
+    }
+
+    function renderEntity(item, targetAgent) {
+        const e = item.entity;
+        const payload = encodeURIComponent(JSON.stringify({type:'entity', ...e}));
+        return `<div class="knowledge-item">
+            <div class="name">🗄️ ${escapeHtml(e.name)}</div>
+            <div class="meta">table: ${escapeHtml(e.table_name)} · ${escapeHtml(e.file_path)}</div>
+            <div class="meta">fields: ${(e.fields || []).slice(0,8).map(f => escapeHtml(f.name)).join(', ')}</div>
+            <div class="actions"><button class="btn btn-small btn-primary" onclick="addKnowledge('${targetAgent}', '${payload}')">加入本次需求</button></div>
+        </div>`;
+    }
+
+    function addKnowledge(agent, encodedPayload) {
+        const payload = JSON.parse(decodeURIComponent(encodedPayload));
+        const list = agent === 'fe' ? selectedFE : selectedBE;
+        const key = payload.file_path || payload.path || payload.name;
+        if (!list.some(item => (item.file_path || item.path || item.name) === key)) list.push(payload);
+        renderSelected();
+    }
+
+    function removeKnowledge(agent, index) {
+        if (agent === 'fe') selectedFE.splice(index, 1);
+        else selectedBE.splice(index, 1);
+        renderSelected();
+    }
+
+    function renderSelected() {
+        document.getElementById('selected-fe').innerHTML = selectedFE.map((item, i) => `
+            <span class="chip">${escapeHtml(item.name || item.path)} <button onclick="removeKnowledge('fe', ${i})">×</button></span>
+        `).join('') || '<span style="color:#999;">暂未选择</span>';
+        document.getElementById('selected-be').innerHTML = selectedBE.map((item, i) => `
+            <span class="chip">${escapeHtml(item.name || item.path)} <button onclick="removeKnowledge('be', ${i})">×</button></span>
+        `).join('') || '<span style="color:#999;">暂未选择</span>';
+    }
+
+    function resetContext() {
+        selectedFE = [];
+        selectedBE = [];
+        renderSelected();
+    }
+
+    function setSearchType(event, type) {
+        activeSearchType = type;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    async function searchKnowledge() {
+        const query = document.getElementById('search-input').value.trim();
+        if (!query) return;
+        const data = await fetch(`/api/knowledge/search?q=${encodeURIComponent(query)}&type=${activeSearchType}&limit=20`).then(r => r.json());
+        document.getElementById('search-results').innerHTML = renderKnowledgeResults(data, activeSearchType === 'components' ? 'fe' : 'be');
+    }
+
+    async function loadStats() {
+        try {
+            const stats = await fetch('/api/stats').then(r => r.json());
+            document.getElementById('stat-components').textContent = stats.frontend_components || 0;
+            document.getElementById('stat-apis').textContent = stats.backend_apis || 0;
+            document.getElementById('stat-services').textContent = stats.backend_services || 0;
+            document.getElementById('stat-testcases').textContent = stats.test_cases || 0;
+            document.getElementById('storage-stats').innerHTML = `
+                <p>前端组件：${stats.frontend_components || 0}</p>
+                <p>后端 API：${stats.backend_apis || 0}</p>
+                <p>后端服务：${stats.backend_services || 0}</p>
+                <p>后端实体：${stats.backend_entities || 0}</p>
+                <p>记忆单元：${stats.memory_units || 0}</p>
+                <p>问答记录：${stats.qa_records || 0}</p>
+                <p>测试用例：${stats.test_cases || 0}</p>
+            `;
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        }
+    }
+
+    renderSelected();
+    loadStats();
+    initUploadArea();
+
+// ==================== Document Upload Functions ====================
+
+let selectedFile = null;
+
+function initUploadArea() {
+    const uploadArea = document.getElementById('upload-area');
+    if (!uploadArea) return;
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileObject(files[0]);
+        }
+    });
+}
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        handleFileObject(file);
+    }
+}
+
+function handleFileObject(file) {
+    selectedFile = file;
+    const preview = document.getElementById('upload-preview');
+    const btn = document.getElementById('btn-upload');
+
+    preview.style.display = 'block';
+    preview.innerHTML = `
+        <div style="padding:10px;background:#f5f5f5;border-radius:8px;margin-top:10px;">
+            <div style="font-weight:700;">📄 ${escapeHtml(file.name)}</div>
+            <div style="font-size:.85rem;color:#666;">${(file.size / 1024).toFixed(1)} KB</div>
+        </div>
+    `;
+    btn.disabled = false;
+}
+
+async function uploadDocument() {
+    if (!selectedFile) return alert('请先选择文件');
+
+    const btn = document.getElementById('btn-upload');
+    btn.disabled = true;
+    btn.textContent = '上传中...';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const response = await fetch('/api/documents/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            alert('文档上传并索引成功！');
+            selectedFile = null;
+            document.getElementById('upload-preview').style.display = 'none';
+            document.getElementById('doc-file').value = '';
+        } else {
+            alert('上传失败：' + (result.error || '未知错误'));
+        }
+    } catch (error) {
+        alert('上传失败：' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '上传并索引';
+    }
+}
+
+async function searchDocuments() {
+    const query = document.getElementById('doc-search-input').value.trim();
+    if (!query) return;
+
+    const resultsDiv = document.getElementById('doc-search-results');
+    resultsDiv.innerHTML = '<p style="padding:14px;color:#888;">搜索中...</p>';
+
+    try {
+        const response = await fetch(`/api/documents/search?q=${encodeURIComponent(query)}&limit=20`);
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+            resultsDiv.innerHTML = data.results.map(r => {
+                const snippetHtml = r.snippet
+                    ? '<div class="doc-snippet">' + escapeHtml(r.snippet) + '</div>'
+                    : '';
+                return `
+                <div class="doc-result-item">
+                    <div class="doc-filename">📄 ${escapeHtml(r.filename)}</div>
+                    <div class="doc-meta">类型: ${escapeHtml(r.file_type)} | 匹配度: ${r.score} | ${escapeHtml(r.extracted_at || '')}</div>
+                    ${snippetHtml}
+                </div>
+            `;
+            }).join('');
+        } else {
+            resultsDiv.innerHTML = '<p style="padding:14px;color:#888;text-align:center;">未找到相关文档</p>';
+        }
+    } catch (error) {
+        resultsDiv.innerHTML = '<p style="padding:14px;color:#f00;">搜索失败：' + escapeHtml(error.message) + '</p>';
+    }
+}
+
+// ==================== System Explorer Functions ====================
+
+async function startExploration() {
+    const url = document.getElementById('explorer-url').value.trim();
+    const engine = document.getElementById('explorer-engine').value;
+    const depth = parseInt(document.getElementById('explorer-depth').value) || 3;
+    const pages = parseInt(document.getElementById('explorer-pages').value) || 50;
+    const states = parseInt(document.getElementById('explorer-states').value) || 30;
+    const actions = parseInt(document.getElementById('explorer-actions').value) || 12;
+    const safeMode = document.getElementById('explorer-safe-mode').checked;
+    const headless = !document.getElementById('explorer-headless').checked;
+    const exploreMode = (document.getElementById('explorer-mode') || {}).value || 'action';
+    const cookieName = (document.getElementById('explorer-cookie-name') || {}).value || '';
+    const cookieValue = (document.getElementById('explorer-cookie-value') || {}).value || '';
+
+    if (!url) {
+        alert('请输入目标URL');
+        return;
+    }
+
+    const btn = document.getElementById('btn-explore');
+    const resultsDiv = document.getElementById('explorer-results');
+
+    btn.disabled = true;
+    btn.textContent = '探索中...';
+    resultsDiv.innerHTML = '<p style="padding:14px;color:#667eea;">🔍 正在探索系统，请稍候...</p>';
+
+    const storageStatePath = computeSessionPath(url);
+    const jwtToken = (document.getElementById('explorer-jwt') || {}).value || '';
+
+    try {
+        const response = await fetch('/api/explorer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url, engine, max_depth: depth, max_pages: pages,
+                max_states: states, max_actions_per_state: actions,
+                safe_mode: safeMode,
+                storage_state_path: storageStatePath,
+                auth_token: jwtToken.trim() || undefined,
+                headless,
+                explore_mode: exploreMode,
+                cookies: (cookieName && cookieValue) ? [{
+                    name: cookieName,
+                    value: cookieValue,
+                    domain: new URL(url).hostname,
+                    path: '/',
+                }] : undefined,
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success' || data.status === 'needs_reauth') {
+            const stats = data.stats || {};
+            const graph = data.graph || {};
+            _lastGraphData = graph;  // save for summarize
+            const needsReauth = data.needs_reauth === true || data.status === 'needs_reauth';
+
+            let html = '';
+
+            if (needsReauth) {
+                html += `
+                    <div style="background:#f8d7da;border-radius:8px;padding:14px;margin-bottom:12px;">
+                        <div style="font-weight:700;color:#721c24;margin-bottom:8px;">🔐 需要登录</div>
+                        <div style="font-size:.88rem;color:#333;margin-bottom:10px;">
+                            目标系统将请求重定向到了登录页（可能 session 已过期，或尚未保存登录状态）。
+                        </div>
+                        <button class="btn btn-primary" onclick="startLoginHelper()">🔄 重新登录</button>
+                        <span style="margin-left:10px;font-size:.82rem;color:#666;">登录后再次点击 "🚀 开始探索"</span>
+                    </div>
+                `;
+            }
+
+            html += `
+                <div style="background:#d4edda;border-radius:8px;padding:14px;margin-bottom:12px;">
+                    <div style="font-weight:700;color:#155724;margin-bottom:8px;">✅ 探索完成</div>
+                    <div style="font-size:.88rem;color:#333;line-height:1.7;">
+                        访问页面: ${stats.pages_visited || 0} |
+                        UI状态: ${stats.states_visited || 0}/${stats.states_discovered || 0} |
+                        发现动作: ${stats.actions_discovered || 0} |
+                        执行动作: ${stats.actions_executed || 0} |
+                        跳过动作: ${stats.actions_skipped || 0} |
+                        重复状态: ${stats.duplicate_states || 0} |
+                        发现API: ${stats.apis_discovered || 0} |
+                        归因API: ${stats.api_calls_attributed || 0}
+                    </div>
+                    <div style="font-size:.82rem;color:#666;margin-top:4px;">引擎: ${data.engine} | URL: ${escapeHtml(data.url)}</div>
+                    <button class="btn btn-primary" style="margin-top:10px;" onclick="summarizeExploration()">🤖 发送给我分析</button>
+                    <div id="summarize-result" style="margin-top:10px;display:none;"></div>
+                </div>
+            `;
+
+            // Display function nodes
+            const nodes = graph.nodes || [];
+            if (nodes.length > 0) {
+                html += `<div style="margin-top:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">📋 功能节点 (${nodes.length})</div>
+                    <div style="max-height:300px;overflow:auto;">`;
+                for (const node of nodes.slice(0, 30)) {
+                    const typeIcon = node.type === 'PAGE_NAV' ? '🌐' : (node.type === 'API_CALL' ? '⚙️' : (node.type === 'FORM_SUBMIT' ? '📝' : '🖱️'));
+                    const ev = node.evidence || {};
+                    const stateHash = ev.state_hash || ev.state_after || '';
+                    const apiCount = (node.related_apis || []).length;
+                    const skipHtml = ev.skip_reason
+                        ? '<span style="margin-left:6px;color:#b26a00;font-size:.75rem;">已跳过: ' + escapeHtml(ev.skip_reason) + '</span>'
+                        : '';
+                    html += `
+                        <div style="padding:8px;border-bottom:1px solid #eee;">
+                            <span style="font-size:1.2rem;">${typeIcon}</span>
+                            <span style="font-weight:600;">${escapeHtml(node.name || 'Unknown')}</span>
+                            ${skipHtml}
+                            <div style="font-size:.78rem;color:#666;margin-top:2px;line-height:1.5;">
+                                类型: ${node.type} | 动作: ${escapeHtml(ev.action_type || '')} | 状态: ${escapeHtml(stateHash.substring(0, 8))} | API: ${apiCount}<br>
+                                入口: ${escapeHtml(node.entry_point || '').substring(0, 90)}
+                            </div>
+                        </div>
+                    `;
+                }
+                if (nodes.length > 30) {
+                    html += `<div style="padding:8px;color:#888;text-align:center;">还有 ${nodes.length - 30} 个节点...</div>`;
+                }
+                html += `</div></div>`;
+            }
+
+            // Display API endpoints
+            const apis = graph.api_endpoints || [];
+            if (apis.length > 0) {
+                html += `<div style="margin-top:12px;">
+                    <div style="font-weight:700;margin-bottom:8px;">🔗 API端点 (${apis.length})</div>
+                    <div style="max-height:200px;overflow:auto;">`;
+                for (const api of apis.slice(0, 20)) {
+                    html += `
+                        <div style="padding:6px;border-bottom:1px solid #eee;font-size:.85rem;line-height:1.5;">
+                            <span style="color:#667eea;">${api.method || 'GET'}</span>
+                            <span style="margin-left:6px;">${escapeHtml(api.url || '')}</span>
+                            <div style="font-size:.76rem;color:#777;">
+                                触发动作: ${escapeHtml(api.action_label || '')} | 状态: ${escapeHtml((api.state_hash || '').substring(0, 8))}
+                            </div>
+                        </div>
+                    `;
+                }
+                if (apis.length > 20) {
+                    html += `<div style="padding:8px;color:#888;text-align:center;">还有 ${apis.length - 20} 个API...</div>`;
+                }
+                html += `</div></div>`;
+            }
+
+            // Display exploration log
+            const log = graph.exploration_log || [];
+            if (log.length > 0) {
+                html += `<div style="margin-top:12px;">
+                    <div style="font-weight:700;margin-bottom:4px;">📜 探索日志</div>
+                    <div style="font-size:.78rem;color:#666;max-height:100px;overflow:auto;">`;
+                for (const entry of log.slice(-30)) {
+                    html += `<div>${escapeHtml(entry.timestamp || '')} - ${escapeHtml(entry.message || '')}</div>`;
+                }
+                html += `</div></div>`;
+            }
+
+            resultsDiv.innerHTML = html;
+        } else {
+            resultsDiv.innerHTML = `<p style="padding:14px;color:#f00;">探索失败: ${escapeHtml(data.error || '未知错误')}</p>`;
+        }
+    } catch (error) {
+        resultsDiv.innerHTML = `<p style="padding:14px;color:#f00;">请求失败: ${escapeHtml(error.message)}</p>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 开始探索';
+    }
+}
+
+// ==================== Manual Exploration (non-blocking) ====================
+
+let _manualSessionId = null;
+let _manualPollInterval = null;
+
+async function startManualExploration() {
+    const url = document.getElementById('explorer-url').value.trim();
+    const cookieName = (document.getElementById('explorer-cookie-name') || {}).value || '';
+    const cookieValue = (document.getElementById('explorer-cookie-value') || {}).value || '';
+    const exploreMode = (document.getElementById('explorer-mode') || {}).value || 'menu';
+
+    if (!url) { alert('请输入目标URL'); return; }
+
+    const cookies = (cookieName && cookieValue) ? [{
+        name: cookieName,
+        value: cookieValue,
+        domain: new URL(url).hostname,
+        path: '/',
+    }] : undefined;
+
+    try {
+        const resp = await fetch('/api/explorer/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ url, cookies, explore_mode: exploreMode })
+        });
+        const data = await resp.json();
+        if (data.error) { alert('启动失败: ' + data.error); return; }
+
+        _manualSessionId = data.session_id;
+        const card = document.getElementById('manual-session-card');
+        card.style.display = 'block';
+        card.innerHTML = `
+            <div style="background:#e7f3ff;border-radius:8px;padding:14px;">
+                <div style="font-weight:700;color:#004a8f;margin-bottom:8px;">🖱️ 手动模式已启动</div>
+                <div style="font-size:.85rem;color:#333;line-height:1.6;">
+                    浏览器已打开，请在窗口中手动浏览。<br>
+                    到达任意页面后，点页面右下角<strong>「🤖 发送给Claude分析」</strong>按钮即可分析当前页面。<br>
+                    完成后点下方<strong>「⏹ 结束手动探索」</strong>按钮停止。
+                </div>
+                <div style="margin-top:10px;">
+                    <button class="btn btn-primary" onclick="stopManualExploration()">⏹ 结束手动探索</button>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        alert('启动失败: ' + e.message);
+    }
+}
+
+async function stopManualExploration() {
+    if (!_manualSessionId) return;
+    try {
+        const resp = await fetch('/api/explorer/stop', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ session_id: _manualSessionId })
+        });
+        const data = await resp.json();
+        _manualSessionId = null;
+        if (_manualPollInterval) { clearInterval(_manualPollInterval); _manualPollInterval = null; }
+
+        // Show results
+        const card = document.getElementById('manual-session-card');
+        card.style.display = 'none';
+        const resultsDiv = document.getElementById('explorer-results');
+        const stats = data.stats || {};
+        resultsDiv.innerHTML = `
+            <div style="background:#d4edda;border-radius:8px;padding:14px;margin-bottom:12px;">
+                <div style="font-weight:700;color:#155724;margin-bottom:8px;">✅ 手动探索完成</div>
+                <div style="font-size:.88rem;color:#333;line-height:1.7;">
+                    访问页面: ${stats.pages_visited || 0} |
+                    发现API: ${stats.apis_discovered || 0} |
+                    执行动作: ${stats.actions_executed || 0}
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        alert('停止失败: ' + e.message);
+    }
+}
+
+// ==================== Summarize Exploration ====================
+
+let _lastGraphData = null;
+
+async function summarizeExploration() {
+    const resultDiv = document.getElementById('summarize-result');
+    if (!_lastGraphData) {
+        resultDiv.innerHTML = '<span style="color:#f00;">请先完成一次探索，再点击分析</span>';
+        resultDiv.style.display = 'block';
+        return;
+    }
+    resultDiv.innerHTML = '<span style="color:#667eea;">🤖 Claude 正在分析，请稍候...</span>';
+    resultDiv.style.display = 'block';
+    try {
+        const response = await fetch('/api/explorer/summarize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                graph: _lastGraphData,
+                url: document.getElementById('explorer-url').value.trim(),
+                description: '菜单优先探索结果'
+            })
+        });
+        const data = await response.json();
+        if (data.error) {
+            resultDiv.innerHTML = '<span style="color:#f00;">分析失败: ' + escapeHtml(data.error) + '</span>';
+        } else {
+            resultDiv.innerHTML = '<div style="background:#f0f0f0;border-radius:8px;padding:12px;white-space:pre-wrap;line-height:1.6;font-size:.88rem;">' + escapeHtml(data.summary || '') + '</div>';
+        }
+    } catch (error) {
+        resultDiv.innerHTML = '<span style="color:#f00;">请求失败: ' + escapeHtml(error.message) + '</span>';
+    }
+}
+
+// ==================== Source Code Browser ====================
+
+let _scProjectsLoaded = false;
+
+async function initSourceCodeBrowser() {
+    if (_scProjectsLoaded) return;
+    const projSel = document.getElementById('sc-project');
+    const typeSel = document.getElementById('sc-type');
+    try {
+        const data = await fetch('/api/sourcecode/list?limit=1').then(r => r.json());
+        if (data.error) return;
+        // Projects
+        (data.projects || []).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.project_name;
+            opt.textContent = p.project_name + ' (' + (p.components ? p.components.length : 0) + ')';
+            projSel.appendChild(opt);
+        });
+        // Types
+        (data.available_types || []).forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = t;
+            typeSel.appendChild(opt);
+        });
+        _scProjectsLoaded = true;
+    } catch (e) {
+        console.error('initSourceCodeBrowser failed:', e);
+    }
+}
+
+function resetSourceCodeFilter() {
+    document.getElementById('sc-project').value = '';
+    document.getElementById('sc-type').value = '';
+    document.getElementById('sc-query').value = '';
+    document.getElementById('sc-detail').style.display = 'none';
+    loadSourceCodeList();
+}
+
+async function loadSourceCodeList() {
+    await initSourceCodeBrowser();
+    const listEl = document.getElementById('sc-list');
+    const statsEl = document.getElementById('sc-stats');
+    listEl.innerHTML = '<div style="color:#667eea;">加载中…</div>';
+    const project = document.getElementById('sc-project').value;
+    const type = document.getElementById('sc-type').value;
+    const query = document.getElementById('sc-query').value.trim();
+    const params = new URLSearchParams();
+    if (project) params.set('project', project);
+    if (type) params.set('type', type);
+    if (query) params.set('query', query);
+    params.set('limit', '500');
+    try {
+        const data = await fetch('/api/sourcecode/list?' + params.toString()).then(r => r.json());
+        if (data.error) {
+            listEl.innerHTML = '<div style="color:#f00;">加载失败: ' + escapeHtml(data.error) + '</div>';
+            return;
+        }
+        const total = data.total || 0;
+        statsEl.innerHTML = '📊 共 <strong>' + total + '</strong> 个组件'
+            + (project ? ' · 项目: ' + escapeHtml(project) : '')
+            + (type ? ' · 类型: ' + escapeHtml(type) : '')
+            + (query ? ' · 关键字: ' + escapeHtml(query) : '');
+        if (total === 0) {
+            listEl.innerHTML = '<div style="color:#666;padding:12px;background:#f9f9f9;border-radius:8px;">📭 没有匹配的组件。试试调整筛选条件。</div>';
+            return;
+        }
+        let html = '';
+        for (const proj of (data.projects || [])) {
+            html += '<div style="margin-bottom:12px;">';
+            html += '<div style="font-weight:700;margin-bottom:6px;color:#444;">📦 ' + escapeHtml(proj.project_name)
+                + ' <span style="font-weight:400;color:#888;font-size:.82rem;">(' + proj.components.length + ' 个组件)</span></div>';
+            html += '<div style="border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;">';
+            for (const c of proj.components) {
+                const typeBadge = c.type ? '<span style="background:#e3f2fd;color:#1976d2;padding:1px 6px;border-radius:3px;font-size:.72rem;margin-left:6px;">' + escapeHtml(c.type) + '</span>' : '';
+                const fp = c.file_path || '';
+                const shortPath = fp.length > 70 ? '…' + fp.slice(-69) : fp;
+                html += '<div style="padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" '
+                    + 'onclick="loadSourceCodeDetail(\'' + encodeForJs(proj.project_name) + '\', \'' + encodeForJs(c.name) + '\')" '
+                    + 'onmouseover="this.style.background=\'#f5f9ff\'" onmouseout="this.style.background=\'transparent\'">';
+                html += '<div style="flex:1;min-width:0;">';
+                html += '<div style="font-weight:600;color:#222;">📄 ' + escapeHtml(c.name) + typeBadge + '</div>';
+                html += '<div style="font-size:.75rem;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(fp) + '">' + escapeHtml(shortPath) + '</div>';
+                html += '</div>';
+                html += '<div style="font-size:.72rem;color:#666;display:flex;gap:10px;flex-shrink:0;">'
+                    + '<span>props:' + c.props_count + '</span>'
+                    + '<span>imp:' + c.imports_count + '</span>'
+                    + '<span>api:' + c.api_calls_count + '</span>'
+                    + '</div>';
+                html += '</div>';
+            }
+            html += '</div></div>';
+        }
+        listEl.innerHTML = html;
+    } catch (e) {
+        listEl.innerHTML = '<div style="color:#f00;">请求失败: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+async function loadSourceCodeDetail(project, name) {
+    const detailEl = document.getElementById('sc-detail');
+    detailEl.style.display = 'block';
+    detailEl.innerHTML = '<div style="color:#667eea;">加载 ' + escapeHtml(name) + ' 详情…</div>';
+    detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    try {
+        const data = await fetch('/api/sourcecode/detail?project=' + encodeURIComponent(project) + '&name=' + encodeURIComponent(name)).then(r => r.json());
+        if (data.error) {
+            detailEl.innerHTML = '<div style="color:#f00;">加载失败: ' + escapeHtml(data.error) + '</div>';
+            return;
+        }
+        const c = data.component || {};
+        const f = data.file || {};
+        let html = '<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:14px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+        html += '<div style="font-weight:700;font-size:1.05rem;">📄 ' + escapeHtml(c.name) + (c.type ? ' <span style="background:#e3f2fd;color:#1976d2;padding:2px 8px;border-radius:4px;font-size:.78rem;">' + escapeHtml(c.type) + '</span>' : '') + '</div>';
+        html += '<button class="btn btn-small btn-secondary" onclick="document.getElementById(\'sc-detail\').style.display=\'none\'">收起</button>';
+        html += '</div>';
+        html += '<div style="font-size:.82rem;color:#666;margin-bottom:10px;word-break:break-all;">📁 ' + escapeHtml(c.file_path || '(无路径)') + '</div>';
+
+        // Meta
+        const meta = [];
+        if ((c.props || []).length) meta.push({label: 'Props (' + c.props.length + ')', items: c.props});
+        if ((c.imports || []).length) meta.push({label: 'Imports (' + c.imports.length + ')', items: c.imports});
+        if ((c.api_calls || []).length) meta.push({label: 'API 调用 (' + c.api_calls.length + ')', items: c.api_calls});
+        if ((c.exports || []).length) meta.push({label: 'Exports (' + c.exports.length + ')', items: c.exports});
+        for (const m of meta) {
+            html += '<div style="margin-top:8px;"><div style="font-weight:600;color:#555;font-size:.85rem;">' + escapeHtml(m.label) + '</div>';
+            html += '<div style="background:#f7f7f7;border-radius:4px;padding:6px 8px;margin-top:4px;max-height:160px;overflow:auto;font-family:monospace;font-size:.78rem;">';
+            for (const it of m.items) {
+                html += '<div style="padding:2px 0;">' + escapeHtml(String(it)) + '</div>';
+            }
+            html += '</div></div>';
+        }
+
+        // Source code
+        if (f.exists) {
+            const titleSuffix = f.truncated ? ' (前 200 行，共 ' + f.size + ' 字节)' : ' (' + f.size + ' 字节)';
+            html += '<div style="margin-top:12px;"><div style="font-weight:600;color:#555;font-size:.85rem;">📜 源码' + escapeHtml(titleSuffix) + '</div>';
+            html += '<pre style="background:#1e1e1e;color:#d4d4d4;border-radius:6px;padding:12px;margin-top:6px;max-height:420px;overflow:auto;font-family:Consolas,Monaco,monospace;font-size:.78rem;line-height:1.5;white-space:pre;">'
+                + escapeHtml(f.content || '') + '</pre></div>';
+        } else {
+            html += '<div style="margin-top:12px;color:#888;font-size:.85rem;">⚠️ 源文件不存在或无法读取</div>';
+        }
+        html += '</div>';
+        detailEl.innerHTML = html;
+    } catch (e) {
+        detailEl.innerHTML = '<div style="color:#f00;">请求失败: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+function escapeAttr(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function encodeForJs(s) {
+    return encodeURIComponent(String(s));
+}
+
+// ==================== Backend Source Code Browser ====================
+
+let _beCurrentCategory = 'apis';
+
+function setBECategory(ev, cat) {
+    _beCurrentCategory = cat;
+    document.querySelectorAll('#scbe-tabs .tab').forEach(t => t.classList.remove('active'));
+    if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
+    document.getElementById('scbe-method').style.display = (cat === 'apis') ? '' : 'none';
+    document.getElementById('scbe-detail').style.display = 'none';
+    loadBELibraryList();
+}
+
+function resetBEFilter() {
+    document.getElementById('scbe-method').value = '';
+    document.getElementById('scbe-query').value = '';
+    document.getElementById('scbe-detail').style.display = 'none';
+    loadBELibraryList();
+}
+
+async function loadBELibraryList() {
+    const listEl = document.getElementById('scbe-list');
+    const metaEl = document.getElementById('scbe-meta');
+    listEl.innerHTML = '<div style="color:#667eea;">加载中…</div>';
+    const query = document.getElementById('scbe-query').value.trim();
+    const method = document.getElementById('scbe-method').value;
+    const params = new URLSearchParams();
+    params.set('category', _beCurrentCategory);
+    if (query) params.set('query', query);
+    if (method) params.set('method', method);
+    params.set('limit', '300');
+    try {
+        const data = await fetch('/api/sourcecode-be/list?' + params.toString()).then(r => r.json());
+        if (data.error) {
+            listEl.innerHTML = '<div style="color:#f00;">加载失败: ' + escapeHtml(data.error) + '</div>';
+            return;
+        }
+        const d = data.data || {};
+        const meta = d._meta || {};
+        const cat = d[_beCurrentCategory] || { total: 0, returned: 0, items: [] };
+        metaEl.innerHTML = '📊 <strong>' + cat.returned + '</strong> / ' + cat.total + ' 条'
+            + (meta.project_name ? ' · 项目: ' + escapeHtml(meta.project_name) : '')
+            + (meta.file_count ? ' · 文件: ' + meta.file_count : '')
+            + (query ? ' · 关键字: ' + escapeHtml(query) : '')
+            + (method ? ' · 方法: ' + escapeHtml(method) : '');
+        if (cat.returned === 0) {
+            listEl.innerHTML = '<div style="color:#666;padding:12px;background:#f9f9f9;border-radius:8px;">📭 没有匹配的项。试试调整筛选条件。</div>';
+            return;
+        }
+        let html = '<div style="border:1px solid #e8e8e8;border-radius:6px;overflow:hidden;">';
+        for (const it of cat.items) {
+            html += '<div style="padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;" '
+                + 'onclick="loadBEDetail(\'' + encodeForJs(_beCurrentCategory) + '\', \'' + encodeForJs(it.id) + '\')" '
+                + 'onmouseover="this.style.background=\'#f5f9ff\'" onmouseout="this.style.background=\'transparent\'">';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+            if (_beCurrentCategory === 'apis') {
+                const m = it.method || '';
+                const mColor = m === 'GET' ? '#43a047' : (m === 'POST' ? '#1976d2' : (m === 'DELETE' ? '#e53935' : '#fb8c00'));
+                html += '<div style="font-weight:600;color:#222;">'
+                    + '<span style="background:' + mColor + ';color:#fff;padding:2px 6px;border-radius:3px;font-size:.72rem;margin-right:6px;">' + escapeHtml(m) + '</span>'
+                    + escapeHtml(it.name || '') + '</div>';
+                html += '<div style="font-size:.75rem;color:#888;">' + escapeHtml(it.class_name || '') + '.' + escapeHtml(it.method_name || '') + '</div>';
+            } else {
+                html += '<div style="font-weight:600;color:#222;">📄 ' + escapeHtml(it.name || it.id) + '</div>';
+                let meta2 = '';
+                if (_beCurrentCategory === 'services') meta2 = '方法: ' + it.method_count + ' / 依赖: ' + it.dependency_count;
+                else if (_beCurrentCategory === 'repositories') meta2 = '实体: ' + (it.entity_type || '-') + ' · 表: ' + (it.table_name || '-');
+                else if (_beCurrentCategory === 'entities') meta2 = '表: ' + (it.table_name || '-') + ' · 字段: ' + it.field_count;
+                html += '<div style="font-size:.75rem;color:#888;">' + escapeHtml(meta2) + '</div>';
+            }
+            html += '</div>';
+            const fp = it.file_path || '';
+            if (fp) {
+                const shortPath = fp.length > 80 ? '…' + fp.slice(-79) : fp;
+                html += '<div style="font-size:.72rem;color:#999;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(fp) + '">' + escapeHtml(shortPath) + '</div>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+        listEl.innerHTML = html;
+    } catch (e) {
+        listEl.innerHTML = '<div style="color:#f00;">请求失败: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+async function loadBEDetail(category, itemId) {
+    const detailEl = document.getElementById('scbe-detail');
+    detailEl.style.display = 'block';
+    detailEl.innerHTML = '<div style="color:#667eea;">加载详情…</div>';
+    detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    try {
+        const url = '/api/sourcecode-be/detail?category=' + encodeForJs(category) + '&id=' + encodeForJs(itemId);
+        const data = await fetch(url).then(r => r.json());
+        if (data.error) {
+            detailEl.innerHTML = '<div style="color:#f00;">加载失败: ' + escapeHtml(data.error) + '</div>';
+            return;
+        }
+        const it = data.item || {};
+        const f = data.file || {};
+        const catName = {apis: 'API', services: 'Service', entities: 'Entity', repositories: 'Repository'}[category] || category;
+        let html = '<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:14px;">';
+        let titleExtra = '';
+        if (category === 'apis') {
+            const m = it.method || '';
+            const mColor = m === 'GET' ? '#43a047' : (m === 'POST' ? '#1976d2' : (m === 'DELETE' ? '#e53935' : '#fb8c00'));
+            titleExtra = ' <span style="background:' + mColor + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:.78rem;">' + escapeHtml(m) + '</span>';
+        }
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+        html += '<div style="font-weight:700;font-size:1.05rem;">🛠 ' + escapeHtml(catName) + titleExtra + ' · ' + escapeHtml(it.name || it.path || itemId) + '</div>';
+        html += '<button class="btn btn-small btn-secondary" onclick="document.getElementById(\'scbe-detail\').style.display=\'none\'">收起</button>';
+        html += '</div>';
+        if (it.file_path) {
+            html += '<div style="font-size:.82rem;color:#666;margin-bottom:10px;word-break:break-all;">📁 ' + escapeHtml(it.file_path) + '</div>';
+        }
+        // Item fields
+        const skipKeys = new Set(['file_path']);
+        const extraPairs = [];
+        for (const [k, v] of Object.entries(it)) {
+            if (skipKeys.has(k)) continue;
+            if (v === '' || v === null || v === undefined) continue;
+            if (Array.isArray(v) && v.length === 0) continue;
+            if (typeof v === 'object' && !Array.isArray(v) && v !== null && Object.keys(v).length === 0) continue;
+            let display;
+            if (Array.isArray(v)) {
+                display = '<div style="background:#f7f7f7;border-radius:4px;padding:6px 8px;margin-top:4px;max-height:160px;overflow:auto;font-family:monospace;font-size:.78rem;">'
+                    + v.map(x => '<div style="padding:2px 0;">' + escapeHtml(typeof x === 'object' ? JSON.stringify(x) : String(x)) + '</div>').join('')
+                    + '</div>';
+            } else if (typeof v === 'object') {
+                display = '<pre style="background:#f7f7f7;border-radius:4px;padding:6px 8px;margin-top:4px;max-height:160px;overflow:auto;font-family:monospace;font-size:.76rem;white-space:pre-wrap;">' + escapeHtml(JSON.stringify(v, null, 2)) + '</pre>';
+            } else {
+                display = '<span style="color:#333;">' + escapeHtml(String(v)) + '</span>';
+            }
+            extraPairs.push('<div style="margin-top:8px;"><div style="font-weight:600;color:#555;font-size:.85rem;">' + escapeHtml(k) + '</div>' + display + '</div>');
+        }
+        html += extraPairs.join('');
+
+        // Source file
+        if (f.exists) {
+            const titleSuffix = f.truncated ? ' (前 200 行，共 ' + f.size + ' 字节)' : ' (' + f.size + ' 字节)';
+            html += '<div style="margin-top:12px;"><div style="font-weight:600;color:#555;font-size:.85rem;">📜 源码' + escapeHtml(titleSuffix) + '</div>';
+            html += '<pre style="background:#1e1e1e;color:#d4d4d4;border-radius:6px;padding:12px;margin-top:6px;max-height:420px;overflow:auto;font-family:Consolas,Monaco,monospace;font-size:.78rem;line-height:1.5;white-space:pre;">'
+                + escapeHtml(f.content || '') + '</pre></div>';
+        } else if (it.file_path) {
+            html += '<div style="margin-top:12px;color:#888;font-size:.85rem;">⚠️ 源文件不存在或无法读取: ' + escapeHtml(it.file_path) + '</div>';
+        }
+        html += '</div>';
+        detailEl.innerHTML = html;
+    } catch (e) {
+        detailEl.innerHTML = '<div style="color:#f00;">请求失败: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+async function showAnalysisHistory() {
+    const resultDiv = document.getElementById('explorer-results');
+    resultDiv.innerHTML = '<div style="color:#667eea;">📚 正在加载分析历史...</div>';
+    try {
+        const response = await fetch('/api/analysis/history?limit=50');
+        const data = await response.json();
+        if (data.error) {
+            resultDiv.innerHTML = '<span style="color:#f00;">加载失败: ' + escapeHtml(data.error) + '</span>';
+            return;
+        }
+        const results = data.results || [];
+        if (results.length === 0) {
+            resultDiv.innerHTML = '<div style="color:#666;padding:12px;background:#f9f9f9;border-radius:8px;">📭 暂无分析历史记录。完成一次「Claude 分析」后，记录会自动出现在这里。</div>';
+            return;
+        }
+        let html = '<div style="background:#fff;border-radius:8px;padding:12px;border:1px solid #e0e0e0;">';
+        html += '<div style="font-weight:700;margin-bottom:10px;color:#333;">📚 分析历史 (共 ' + results.length + ' 条)</div>';
+        for (const item of results) {
+            const typeIcon = item.type === 'manual' ? '🖱️' : '🗺️';
+            const typeLabel = item.type === 'manual' ? '手动' : '批量';
+            html += '<div style="padding:10px;border-bottom:1px solid #eee;cursor:pointer;" onclick="viewAnalysisDetail(\'' + item.id + '\')" onmouseover="this.style.background=\'#f5f5f5\'" onmouseout="this.style.background=\'transparent\'">';
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+            html += '<div><span style="margin-right:6px;">' + typeIcon + '</span><strong>' + escapeHtml(item.id) + '</strong> <span style="background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:4px;font-size:.75rem;margin-left:4px;">' + typeLabel + '</span></div>';
+            html += '<div style="font-size:.78rem;color:#888;">' + escapeHtml(item.created_at) + '</div>';
+            html += '</div>';
+            html += '<div style="font-size:.85rem;color:#555;margin-top:4px;">URL: ' + escapeHtml((item.url || '').substring(0, 80)) + '</div>';
+            html += '<div style="font-size:.82rem;color:#666;margin-top:4px;line-height:1.5;">' + escapeHtml(item.summary_preview || '') + '</div>';
+            html += '<div style="font-size:.75rem;color:#999;margin-top:4px;">👆 点击查看完整详情</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+        resultDiv.innerHTML = html;
+    } catch (error) {
+        resultDiv.innerHTML = '<span style="color:#f00;">请求失败: ' + escapeHtml(error.message) + '</span>';
+    }
+}
+
+async function promptAnalysisDetail() {
+    const id = prompt('请输入要查询的分析记录 ID（例如 a1b2c3d4）：');
+    if (!id || !id.trim()) return;
+    await viewAnalysisDetail(id.trim());
+}
+
+async function viewAnalysisDetail(analysisId) {
+    const resultDiv = document.getElementById('explorer-results');
+    resultDiv.innerHTML = '<div style="color:#667eea;">📋 正在加载分析详情...</div>';
+    try {
+        const response = await fetch('/api/analysis/' + encodeURIComponent(analysisId));
+        const data = await response.json();
+        if (data.error) {
+            resultDiv.innerHTML = '<span style="color:#f00;">加载失败: ' + escapeHtml(data.error) + '</span>';
+            return;
+        }
+        const item = data.result || {};
+        const typeIcon = item.type === 'manual' ? '🖱️ 手动分析' : '🗺️ 批量分析';
+        let html = '<div style="background:#fff;border-radius:8px;padding:16px;border:1px solid #e0e0e0;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+        html += '<div style="font-weight:700;font-size:1.1rem;">' + typeIcon + ' - ' + escapeHtml(item.id) + '</div>';
+        html += '<button class="btn btn-small btn-secondary" onclick="deleteAnalysis(\'' + item.id + '\')">🗑️ 删除</button>';
+        html += '</div>';
+        html += '<div style="font-size:.85rem;color:#666;margin-bottom:8px;"><strong>URL:</strong> ' + escapeHtml(item.url || '') + '</div>';
+        html += '<div style="font-size:.85rem;color:#666;margin-bottom:12px;"><strong>创建时间:</strong> ' + escapeHtml(item.created_at || '') + '</div>';
+        if (item.stats && Object.keys(item.stats).length > 0) {
+            html += '<div style="background:#f5f5f5;padding:10px;border-radius:6px;margin-bottom:12px;font-size:.85rem;">';
+            html += '<strong>📊 统计信息:</strong><br>';
+            for (const [k, v] of Object.entries(item.stats)) {
+                html += '<span style="margin-right:12px;">' + escapeHtml(k) + ': ' + escapeHtml(String(v)) + '</span>';
+            }
+            html += '</div>';
+        }
+        html += '<div style="background:#f9f9f9;padding:12px;border-radius:8px;white-space:pre-wrap;line-height:1.6;font-size:.9rem;border-left:4px solid #667eea;">' + escapeHtml(item.summary || '') + '</div>';
+        html += '<div style="margin-top:12px;"><button class="btn btn-secondary" onclick="showAnalysisHistory()">← 返回历史列表</button></div>';
+        html += '</div>';
+        resultDiv.innerHTML = html;
+    } catch (error) {
+        resultDiv.innerHTML = '<span style="color:#f00;">请求失败: ' + escapeHtml(error.message) + '</span>';
+    }
+}
+
+async function deleteAnalysis(analysisId) {
+    if (!confirm('确认删除分析记录 ' + analysisId + ' ？')) return;
+    try {
+        const response = await fetch('/api/analysis/' + encodeURIComponent(analysisId), { method: 'DELETE' });
+        const data = await response.json();
+        if (data.error) {
+            alert('删除失败: ' + data.error);
+        } else {
+            alert('已删除: ' + analysisId);
+            await showAnalysisHistory();
+        }
+    } catch (error) {
+        alert('请求失败: ' + error.message);
+    }
+}
+
+// ==================== Login Helper Functions ====================
+
+let _activeLoginHelperId = null;
+let _loginHelperPoll = null;
+
+async function sha1Hex(str) {
+    const buf = new TextEncoder().encode(str);
+    const hashBuf = await crypto.subtle.digest('SHA-1', buf);
+    return Array.from(new Uint8Array(hashBuf))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function computeSessionPath(url) {
+    let normalized;
+    try {
+        const u = new URL(url);
+        normalized = u.protocol + '//' + u.host + u.pathname;
+    } catch (e) {
+        return null;
+    }
+    const hash = await sha1Hex(normalized);
+    return `data/storage_states/${hash}.json`;
+}
+
+async function saveJwt() {
+    const url = document.getElementById('explorer-url').value.trim();
+    const jwt = document.getElementById('explorer-jwt').value.trim();
+    if (!url) { alert('请先在 "目标 URL" 框中输入网址'); return; }
+    if (!jwt) { alert('请粘贴 JWT (Authorization 头的 Bearer token)'); return; }
+    try {
+        const r = await fetch('/api/explorer/auth-save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, header_value: jwt, header_name: 'Authorization' })
+        });
+        const data = await r.json();
+        if (data.status === 'saved') {
+            alert('✅ JWT 已保存到 ' + data.auth_sidecar + '\n下次探索时会自动加上 Authorization 请求头。');
+        } else {
+            alert('保存失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('请求失败：' + e.message);
+    }
+}
+
+// ==================== Cookie localStorage persistence ====================
+function saveCookieToStorage() {
+    const name = (document.getElementById('explorer-cookie-name') || {}).value || 'Admin-Token';
+    const value = (document.getElementById('explorer-cookie-value') || {}).value || '';
+    localStorage.setItem('cookie_name', name);
+    localStorage.setItem('cookie_value', value);
+}
+
+function loadCookieFromStorage() {
+    const savedName = localStorage.getItem('cookie_name') || '';
+    const savedValue = localStorage.getItem('cookie_value') || '';
+    const nameEl = document.getElementById('explorer-cookie-name');
+    const valueEl = document.getElementById('explorer-cookie-value');
+    if (nameEl && savedName) nameEl.value = savedName;
+    if (valueEl && savedValue) valueEl.value = savedValue;
+}
+
+window.addEventListener('DOMContentLoaded', loadCookieFromStorage);
+window.addEventListener('DOMContentLoaded', () => { loadSourceCodeList(); });
+window.addEventListener('DOMContentLoaded', () => { initSourceCodeBrowser(); });
+window.addEventListener('DOMContentLoaded', () => { loadBELibraryList(); });
+
+// ==================== Cookie save to server ====================
+
+async function saveCookie() {
+    const url = document.getElementById('explorer-url').value.trim();
+    const name = document.getElementById('explorer-cookie-name').value.trim() || 'Admin-Token';
+    const value = document.getElementById('explorer-cookie-value').value.trim();
+    if (!url) { alert('请先在 "目标 URL" 框中输入网址'); return; }
+    if (!value) { alert('请填写 Cookie 值'); return; }
+    try {
+        const r = await fetch('/api/explorer/cookie-save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, name, value })
+        });
+        const data = await r.json();
+        if (data.status === 'saved') {
+            alert('✅ Cookie ' + name + ' 已保存到\n' + data.cookies_sidecar + '\n下次探索时浏览器会带上这个 cookie。');
+        } else {
+            alert('保存失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('请求失败：' + e.message);
+    }
+}
+
+async function startLoginHelper() {
+    const url = document.getElementById('explorer-url').value.trim();
+    if (!url) { alert('请先在 "目标 URL" 框中输入网址'); return; }
+    const card = document.getElementById('login-helper-card');
+    const status = document.getElementById('login-helper-status');
+    const btnDone = document.getElementById('btn-login-done');
+    const btnCancel = document.getElementById('btn-login-cancel');
+    card.style.display = 'block';
+    if (btnDone) btnDone.style.display = '';
+    if (btnCancel) btnCancel.style.display = '';
+    status.innerHTML = '正在打开浏览器...<br><span style="color:#888;font-size:.78rem;">登录完成后，请点下方 <b>✅ 我已登录完成</b> 保存会话。</span>';
+    // Scroll the helper card into view — the page is long and the user
+    // would otherwise miss the button.
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    try {
+        const r = await fetch('/api/explorer/login-helper', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        const data = await r.json();
+        if (data.status !== 'started') {
+            status.innerHTML = '<span style="color:#c00;">启动失败：' + escapeHtml(data.error || '未知错误') + '</span>';
+            return;
+        }
+        _activeLoginHelperId = data.helper_id;
+        // Poll status every 2s. Show the current final_url in the status
+        // area but DO NOT replace the buttons row (otherwise the
+        // "我已登录完成" button disappears mid-session).
+        _loginHelperPoll = setInterval(async () => {
+            try {
+                const sr = await fetch('/api/explorer/login-helper/' + _activeLoginHelperId + '/status');
+                const s = await sr.json();
+                if (s.saved) {
+                    clearInterval(_loginHelperPoll);
+                    _loginHelperPoll = null;
+                    status.innerHTML = '<span style="color:#155724;">✅ 已保存 (' + escapeHtml(s.reason || '') + ')<br>最终URL: ' + escapeHtml(s.final_url || '') + '<br>可以点击 "🚀 开始探索" 了。</span>';
+                    if (btnDone) btnDone.style.display = 'none';
+                    if (btnCancel) btnCancel.style.display = 'none';
+                } else if (s.final_url) {
+                    status.innerHTML = '浏览器已打开，当前URL: ' + escapeHtml(s.final_url) + '<br><span style="color:#888;font-size:.78rem;">登录完成后，请点下方 <b>✅ 我已登录完成</b> 保存会话。</span>';
+                }
+            } catch (e) { /* ignore */ }
+        }, 2000);
+    } catch (e) {
+        status.innerHTML = '<span style="color:#c00;">请求失败：' + escapeHtml(e.message) + '</span>';
+    }
+}
+
+async function finishLoginHelper() {
+    if (!_activeLoginHelperId) { alert('没有正在进行的登录会话'); return; }
+    const status = document.getElementById('login-helper-status');
+    if (_loginHelperPoll) { clearInterval(_loginHelperPoll); _loginHelperPoll = null; }
+    status.textContent = '正在保存登录状态...';
+    try {
+        const r = await fetch('/api/explorer/login-helper/' + _activeLoginHelperId + '/done', { method: 'POST' });
+        const data = await r.json();
+        if (data.saved) {
+            status.innerHTML = '<span style="color:#155724;">✅ 登录状态已保存 (' + escapeHtml(data.reason || '') + ')<br>最终URL: ' + escapeHtml(data.final_url || '') + '<br>可以点击 "🚀 开始探索" 了。</span>';
+        } else if (data.error) {
+            status.innerHTML = '<span style="color:#c00;">保存失败：' + escapeHtml(data.error) + '</span>';
+        } else {
+            status.innerHTML = '<span style="color:#c00;">未保存 (' + escapeHtml(data.reason || '未知原因') + ')。最终URL: ' + escapeHtml(data.final_url || '') + '</span>';
+        }
+    } catch (e) {
+        status.innerHTML = '<span style="color:#c00;">请求失败：' + escapeHtml(e.message) + '</span>';
+    }
+    _activeLoginHelperId = null;
+}
+
+async function cancelLoginHelper() {
+    if (_loginHelperPoll) { clearInterval(_loginHelperPoll); _loginHelperPoll = null; }
+    if (!_activeLoginHelperId) {
+        document.getElementById('login-helper-card').style.display = 'none';
+        return;
+    }
+    try {
+        await fetch('/api/explorer/login-helper/' + _activeLoginHelperId + '/cancel', { method: 'POST' });
+    } catch (e) { /* ignore */ }
+    _activeLoginHelperId = null;
+    document.getElementById('login-helper-card').style.display = 'none';
+}
+
+// ==================== Log Viewing Functions ====================
+
+let logAutoRefresh = null;
+
+async function loadLogs() {
+    const search = document.getElementById('log-search').value.trim();
+    const level = document.getElementById('log-level').value;
+    const lines = document.getElementById('log-lines').value;
+
+    const viewer = document.getElementById('log-viewer');
+    viewer.innerHTML = '<div style="color:#667eea;">⏳ 加载日志中...</div>';
+
+    try {
+        let url = `/api/logs?lines=${lines}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (level) url += `&level=${encodeURIComponent(level)}`;
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.error) {
+            viewer.innerHTML = `<div style="color:#f00;">错误: ${escapeHtml(data.error)}</div>`;
+            return;
+        }
+
+        if (!data.lines || data.lines.length === 0) {
+            viewer.innerHTML = '<div style="color:#666;">暂无日志内容</div>';
+            return;
+        }
+
+        viewer.innerHTML = data.lines.map(line => {
+            // Color code by level
+            let color = '#0f0'; // default green
+            let bg = '';
+            if (line.includes('ERROR')) {
+                color = '#ff6b6b';
+                bg = 'background:rgba(255,107,107,0.1);';
+            } else if (line.includes('WARNING')) {
+                color = '#ffd93d';
+                bg = 'background:rgba(255,217,61,0.1);';
+            } else if (line.includes('INFO')) {
+                color = '#6bcbff';
+            }
+            return `<div style="${bg}color:${color};padding:2px 4px;border-bottom:1px solid #333;">${escapeHtml(line)}</div>`;
+        }).join('');
+
+    } catch (error) {
+        viewer.innerHTML = `<div style="color:#f00;">加载失败: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+async function clearLogs() {
+    if (!confirm('确定要清空所有日志吗？此操作不可恢复。')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/logs/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'cleared') {
+            alert('日志已清空');
+            loadLogs();
+        } else {
+            alert('清空失败: ' + (data.error || '未知错误'));
+        }
+    } catch (error) {
+        alert('清空失败: ' + error.message);
+    }
+}
+
+function toggleAutoRefreshLogs() {
+    const btn = document.getElementById('btn-auto-refresh');
+    if (logAutoRefresh) {
+        clearInterval(logAutoRefresh);
+        logAutoRefresh = null;
+        btn.textContent = '🔄 自动刷新';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    } else {
+        logAutoRefresh = setInterval(loadLogs, 5000);
+        btn.textContent = '⏸ 停止刷新';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+    }
+}
+</script>
+</body>
+</html>

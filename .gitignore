@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Data & runtime state (don't track the SQLite DB or analysis history)
+data/memory.db
+data/memory.db-journal
+data/analysis_history/
+data/exploration_history/
+data/explorer/
+data/storage_states/
+data/uploads/
+logs/
+*.log
+
+# Knowledge base JSON (large, regeneratable)
+data/frontend_knowledge_base.json
+data/backend_knowledge_base.json
+
+# Build / dist
+build/
+dist/
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts
+test_extracted.js
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment
+.env
+.env.local

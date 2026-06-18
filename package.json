@@ -1,0 +1,14 @@
+{
+  "name": "ai-test-knowledge-platform-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Puppeteer-based recursive system function explorer for AI Test Knowledge Platform",
+  "type": "commonjs",
+  "scripts": {
+    "explore": "node src/knowledge/system_explorer.js",
+    "check:explorer": "node --check src/knowledge/system_explorer.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  }
+}
