@@ -518,8 +518,8 @@
             // If there are no questions, skip the dialog
             const points = data.ambiguous_points || [];
             if (points.length === 0) {
-                // No clarifications needed, run directly
-                submitRequirement();
+                // No clarifications needed, still run FE/BE tech review first
+                reviewTechAndConfirm([]);
                 return;
             }
             // Show confirmation dialog
@@ -673,10 +673,131 @@
         }
 
         closeEdgeConfirmDialog();
-        await submitRequirement(confirmations);
+        await reviewTechAndConfirm(confirmations);
     }
 
-    async function submitRequirement(edgeConfirmations) {
+    async function reviewTechAndConfirm(edgeConfirmations) {
+        const requirement = document.getElementById('requirement-input').value.trim();
+        const extraNotes = (document.getElementById('extra-notes')?.value || '').trim();
+        const autoContext = !!document.getElementById('auto-context-toggle')?.checked;
+        setLoading(true);
+        try {
+            const resp = await fetch('/api/requirement/tech-review', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    requirement,
+                    extra_notes: extraNotes,
+                    auto_context: autoContext,
+                    edge_confirmations: edgeConfirmations || [],
+                })
+            });
+            const data = await resp.json();
+            setLoading(false);
+            if (data.error) {
+                alert('技术审核失败: ' + data.error);
+                return;
+            }
+            showTechReviewDialog({
+                edgeConfirmations: edgeConfirmations || [],
+                review: data.review || {},
+                matchedContext: data.matched_context || {},
+            });
+        } catch (e) {
+            setLoading(false);
+            alert('技术审核失败: ' + e.message);
+        }
+    }
+
+    function showTechReviewDialog(ctx) {
+        const old = document.getElementById('tech-review-modal');
+        if (old) old.remove();
+        const modal = document.createElement('div');
+        modal.id = 'tech-review-modal';
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:999999;display:flex;align-items:center;justify-content:center;';
+        const r = ctx.review || {};
+        const fe = r.frontend_review || {};
+        const be = r.backend_review || {};
+        const ctxTotals = (ctx.matchedContext && ctx.matchedContext.totals) || {frontend:0, backend:0};
+        function list(title, items, color) {
+            items = items || [];
+            if (!items.length) return '';
+            return '<div style="margin-top:10px;"><div style="font-weight:700;color:' + color + ';margin-bottom:4px;">' + escapeHtml(title) + '</div><ul style="margin:0;padding-left:18px;line-height:1.55;">' + items.map(x => '<li>' + escapeHtml(String(x)) + '</li>').join('') + '</ul></div>';
+        }
+        modal.innerHTML = `
+            <div style="background:#fff;border-radius:12px;max-width:900px;width:94%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,.3);">
+                <div style="padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-weight:700;font-size:1.1rem;">🧑‍💻 FE/BE 技术审核</div>
+                        <div style="font-size:.82rem;color:#666;margin-top:2px;">AI 已基于需求边界和知识库做技术分析，请人工审核后再生成测试用例</div>
+                    </div>
+                    <button onclick="closeTechReviewDialog()" style="background:transparent;border:none;font-size:24px;cursor:pointer;color:#888;line-height:1;">&times;</button>
+                </div>
+                <div style="padding:10px 20px;background:#e3f2fd;border-left:4px solid #1976d2;font-size:.88rem;color:#0d47a1;">
+                    📌 ${escapeHtml(r.summary || '请审核下方 FE/BE 分析结果')} · 匹配上下文：FE ${ctxTotals.frontend || 0} 条 / BE ${ctxTotals.backend || 0} 条
+                </div>
+                <div style="padding:16px 20px;overflow:auto;flex:1;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                        <div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;background:#fafafa;">
+                            <div style="font-weight:700;color:#1976d2;margin-bottom:8px;">🎨 FE 审核</div>
+                            ${list('受影响组件', fe.affected_components, '#1976d2')}
+                            ${list('UI 状态', fe.ui_states, '#1976d2')}
+                            ${list('前端风险', fe.frontend_risks, '#c62828')}
+                            ${list('建议检查点', fe.suggested_checks, '#2e7d32')}
+                        </div>
+                        <div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;background:#fafafa;">
+                            <div style="font-weight:700;color:#43a047;margin-bottom:8px;">⚙️ BE 审核</div>
+                            ${list('受影响 API', be.affected_apis, '#43a047')}
+                            ${list('Service / Entity', be.services_entities, '#43a047')}
+                            ${list('后端风险', be.backend_risks, '#c62828')}
+                            ${list('建议检查点', be.suggested_checks, '#2e7d32')}
+                        </div>
+                    </div>
+                    ${list('🔗 前后端联调检查', r.integration_review, '#6a1b9a')}
+                    ${list('⚠️ 必须人工关注', r.needs_manual_attention, '#e65100')}
+                    <div style="margin-top:14px;">
+                        <div style="font-weight:700;color:#444;margin-bottom:4px;">📝 人工审核意见 / 修正（可选，但会写入最终上下文）</div>
+                        <textarea id="tech-review-notes" rows="4" placeholder="例如：某 API 不适用；某组件是旧版本；需要额外验证缓存/权限/跨部门数据..." style="width:100%;font-family:inherit;font-size:.88rem;padding:8px;border:1px solid #ddd;border-radius:6px;resize:vertical;"></textarea>
+                    </div>
+                </div>
+                <div style="padding:14px 20px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center;background:#fafafa;border-radius:0 0 12px 12px;">
+                    <div style="font-size:.82rem;color:#666;">确认后才会正式调用 PM/FE/BE/QA 生成测试用例</div>
+                    <div>
+                        <button class="btn btn-secondary" onclick="closeTechReviewDialog()">返回修改</button>
+                        <button class="btn btn-primary" onclick="confirmTechReviewAndSubmit()" style="margin-left:8px;">✅ 审核通过，生成测试用例</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        window._lastTechReviewCtx = ctx;
+        modal.addEventListener('click', function(ev) {
+            if (ev.target === modal) closeTechReviewDialog();
+        });
+        document.addEventListener('keydown', _techEscHandler);
+    }
+
+    function _techEscHandler(ev) {
+        if (ev.key === 'Escape') closeTechReviewDialog();
+    }
+
+    function closeTechReviewDialog() {
+        const m = document.getElementById('tech-review-modal');
+        if (m) m.remove();
+        document.removeEventListener('keydown', _techEscHandler);
+    }
+
+    async function confirmTechReviewAndSubmit() {
+        const ctx = window._lastTechReviewCtx || {};
+        const notes = (document.getElementById('tech-review-notes')?.value || '').trim();
+        closeTechReviewDialog();
+        await submitRequirement(ctx.edgeConfirmations || [], {
+            notes,
+            payload: ctx.review || {},
+            confirmed: true,
+        });
+    }
+
+    async function submitRequirement(edgeConfirmations, techReview) {
         const requirement = document.getElementById('requirement-input').value.trim();
         if (!requirement) return alert('请输入需求');
 
@@ -699,6 +820,9 @@
                     frontend_context: selectedFE,
                     backend_context: selectedBE,
                     edge_confirmations: edgeConfirmations || [],
+                    tech_review_notes: (techReview && techReview.notes) || '',
+                    tech_review_payload: (techReview && techReview.payload) || {},
+                    tech_review_confirmed: !!(techReview && techReview.confirmed),
                 })
             });
             const result = await response.json();

@@ -271,6 +271,9 @@ def process_requirement():
         extra_notes = (data.get('extra_notes') or '').strip()
         auto_context = bool(data.get('auto_context', True))
         edge_confirmations = list(data.get('edge_confirmations') or [])
+        tech_review_notes = (data.get('tech_review_notes') or '').strip()
+        tech_review_confirmed = bool(data.get('tech_review_confirmed', False))
+        tech_review_payload = data.get('tech_review_payload') or {}
 
         if not requirement:
             return jsonify({'error': 'Requirement is required'}), 400
@@ -336,6 +339,17 @@ def process_requirement():
                     "## 需求边界确认（用户已逐条回答，需要在测试用例/证据链中体现）\n"
                     + "\n".join(qa_lines)
                 )
+        if tech_review_confirmed or tech_review_notes or tech_review_payload:
+            review_section = {
+                'confirmed': tech_review_confirmed,
+                'review_notes': tech_review_notes,
+                'ai_tech_review': tech_review_payload,
+            }
+            sections.append(
+                "## FE/BE 技术审核结果（用户已人工审核，生成测试用例时必须参考）\n"
+                + json.dumps(review_section, ensure_ascii=False, indent=2)
+            )
+
         if merged_fe or merged_be:
             context_payload = {
                 'frontend_selected_knowledge': merged_fe,
@@ -485,6 +499,128 @@ def _auto_match_kb_context(requirement: str):
         logger.debug("auto BE match failed: %s", e)
 
     return auto_fe, auto_be
+
+
+@app.route('/api/requirement/tech-review', methods=['POST'])
+def preview_tech_review():
+    """Generate FE/BE technical review based on requirement + edge confirmations
+    + auto-matched KB context. This is reviewed by the user before running the
+    full test-case generation workflow.
+    """
+    try:
+        data = request.get_json() or {}
+        requirement = (data.get('requirement') or '').strip()
+        extra_notes = (data.get('extra_notes') or '').strip()
+        edge_confirmations = list(data.get('edge_confirmations') or [])
+        auto_context = bool(data.get('auto_context', True))
+        if not requirement:
+            return jsonify({'error': 'requirement is required'}), 400
+
+        auto_fe, auto_be = _auto_match_kb_context(requirement) if auto_context else ([], [])
+
+        # Slim context to keep prompt under control
+        fe_slim = []
+        for item in auto_fe[:10]:
+            c = item.get('component', {})
+            fe_slim.append({
+                'project': item.get('project'),
+                'name': c.get('name'),
+                'file_path': c.get('file_path'),
+                'type': c.get('type'),
+                'props': c.get('props', [])[:10],
+                'imports': c.get('imports', [])[:20],
+                'api_calls': c.get('api_calls', [])[:20],
+                'score': item.get('score'),
+            })
+        be_slim = []
+        for item in auto_be[:20]:
+            if item.get('type') == 'api':
+                a = item.get('api', {})
+                be_slim.append({
+                    'type': 'api', 'method': a.get('method'), 'path': a.get('path'),
+                    'class_name': a.get('class_name'), 'method_name': a.get('method_name'),
+                    'file_path': a.get('file_path'), 'parameters': a.get('parameters', [])[:10],
+                    'request_body': a.get('request_body'), 'response_type': a.get('response_type'),
+                    'score': item.get('score'),
+                })
+            elif item.get('type') == 'service':
+                s = item.get('service', {})
+                be_slim.append({
+                    'type': 'service', 'name': s.get('name'), 'file_path': s.get('file_path'),
+                    'methods': s.get('methods', [])[:20], 'dependencies': s.get('dependencies', [])[:20],
+                    'score': item.get('score'),
+                })
+            elif item.get('type') == 'entity':
+                e = item.get('entity', {})
+                be_slim.append({
+                    'type': 'entity', 'name': e.get('name'), 'file_path': e.get('file_path'),
+                    'table_name': e.get('table_name'), 'fields': e.get('fields', [])[:30],
+                    'score': item.get('score'),
+                })
+
+        from src.adapters.llm_adapter import LLMAdapter
+        llm = LLMAdapter()
+        prompt = f"""你是资深测试架构师，需要在正式生成测试用例前做一次 FE/BE 技术审核。
+
+## 需求
+{requirement}
+
+## 用户补充说明
+{extra_notes or '无'}
+
+## 已确认的需求边界
+{json.dumps(edge_confirmations, ensure_ascii=False, indent=2)}
+
+## 自动匹配到的 FE 知识库上下文
+{json.dumps(fe_slim, ensure_ascii=False, indent=2)}
+
+## 自动匹配到的 BE 知识库上下文
+{json.dumps(be_slim, ensure_ascii=False, indent=2)}
+
+请输出 JSON，字段如下：
+{{
+  "summary": "一句话总结本次技术审核结论",
+  "frontend_review": {{
+    "affected_components": ["组件名/文件路径/影响说明"],
+    "ui_states": ["需要关注的页面状态/交互状态"],
+    "frontend_risks": ["前端风险/边界"],
+    "suggested_checks": ["前端测试检查点"]
+  }},
+  "backend_review": {{
+    "affected_apis": ["METHOD path - 影响说明"],
+    "services_entities": ["Service/Entity/表/字段影响"],
+    "backend_risks": ["后端风险/边界"],
+    "suggested_checks": ["后端测试检查点"]
+  }},
+  "integration_review": ["前后端联调/数据一致性/错误码/权限/性能等检查点"],
+  "needs_manual_attention": ["必须由人工审核确认的点"]
+}}
+
+要求：只返回 JSON，不要 markdown，不要解释。"""
+        review = llm.generate_structured(
+            system_prompt="你只输出 JSON。",
+            user_message=prompt,
+        )
+        if not isinstance(review, dict):
+            review = {
+                'summary': '',
+                'frontend_review': {},
+                'backend_review': {},
+                'integration_review': [],
+                'needs_manual_attention': [],
+            }
+        return jsonify({
+            'status': 'success',
+            'review': review,
+            'matched_context': {
+                'frontend': fe_slim,
+                'backend': be_slim,
+                'totals': {'frontend': len(auto_fe), 'backend': len(auto_be)},
+            },
+        })
+    except Exception as e:
+        logger.error("Error generating tech review: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/requirement/auto-context', methods=['POST'])
