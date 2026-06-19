@@ -184,90 +184,63 @@ def preview_requirement():
         if not requirement:
             return jsonify({'error': 'requirement is required'}), 400
 
-        # Build the input that PM will see (include extra_notes if any)
-        full_input = requirement
-        if extra_notes:
-            full_input = f"{requirement}\n\n[用户补充说明]\n{extra_notes}"
+        from src.adapters.llm_adapter import LLMAdapter
+        llm = LLMAdapter()
 
-        from src.agents.pm_agent import ProductManagerAgent
-        agent = ProductManagerAgent()
-        output = agent.act(full_input)
+        # Single, controlled JSON-only call. This avoids PM Agent's strict
+        # schema validation (which can fail when the LLM returns plain text
+        # from the CLI) and produces a stable response shape for the UI.
+        prompt = (
+            "你是一个资深测试工程师。用户提供了以下需求，请完成两件事：\n"
+            "1. 用 1 句话概述这个需求的核心目的（summary）\n"
+            "2. 列出 3-7 个**在测试中容易遗漏/边界值/灰色地带**的注意事项\n\n"
+            "要求：\n"
+            "- 每条问题要简洁、明确、可勾选（用户可回答：待确认/按通用/不需要/自定义）\n"
+            "- 不要问开放性问题，不要问已知信息\n"
+            "- category 必须是以下之一：边界值、权限、异常、业务规则、性能、兼容性、其他\n"
+            "- context 是给用户的提示文字，说明该问题为何重要（不超过 50 字）\n\n"
+            f"需求：\n{requirement}\n\n"
+            + (f"用户补充说明：\n{extra_notes}\n\n" if extra_notes else "")
+            + "请严格用以下 JSON 格式返回（不要任何其他内容、不要 markdown 代码块、不要换行包裹）：\n"
+            '{"summary": "<一句话需求概述>",'
+            '"ambiguous_points": ['
+            '{"question": "...", "context": "...", "category": "边界值|权限|异常|业务规则|性能|兼容性|其他"}'
+            ']}'
+        )
+        result = llm.generate_structured(
+            system_prompt="你只输出 JSON，不要任何解释或前后缀。",
+            user_message=prompt,
+        )
 
-        parsed = output.content if isinstance(output.content, dict) else {}
-        questions = output.questions or []
+        if not isinstance(result, dict):
+            # Defensive: if for any reason we didn't get a dict, synthesize an
+            # empty-but-valid response so the UI still works.
+            result = {'summary': '', 'ambiguous_points': []}
 
-        # Build ambiguous_points with optional context from parsed
         ambiguous_points = []
-        # questions may be a list of strings (legacy) or a list of dicts
-        for q in (parsed.get('ambiguous_points') or []):
-            if isinstance(q, dict):
+        for q in (result.get('ambiguous_points') or []):
+            if isinstance(q, dict) and q.get('question'):
                 ambiguous_points.append({
-                    'question': q.get('question', ''),
-                    'context': q.get('context', ''),
-                    'category': q.get('category', 'general'),
+                    'question': str(q.get('question', '')).strip(),
+                    'context': str(q.get('context', '')).strip(),
+                    'category': str(q.get('category', 'general')).strip() or 'general',
                 })
-            else:
-                ambiguous_points.append({'question': str(q), 'context': '', 'category': 'general'})
-        # Fall back to output.questions if no structured ambiguous_points
-        if not ambiguous_points and questions:
-            for q in questions:
-                ambiguous_points.append({'question': str(q), 'context': '', 'category': 'general'})
+            elif isinstance(q, str) and q.strip():
+                ambiguous_points.append({
+                    'question': q.strip(),
+                    'context': '',
+                    'category': 'general',
+                })
 
-        # If the LLM didn't return structured output (CLI returned plain text),
-        # fall back to a lightweight LLM call that asks directly for edge points
-        # in a controlled JSON shape.
-        if not ambiguous_points:
-            try:
-                from src.adapters.llm_adapter import LLMAdapter
-                llm = LLMAdapter()
-                fallback_prompt = (
-                    "你是一个资深测试工程师。用户提供了以下需求，请列出 3-7 个**在测试中容易遗漏/边界值/灰色地带**的注意事项，"
-                    "让用户在线勾选确认。每条问题要简洁、明确、可勾选（是/否或具体值），不要问开放性问题。\n\n"
-                    f"需求：\n{requirement}\n\n"
-                    + (f"补充说明：\n{extra_notes}\n\n" if extra_notes else "")
-                    + '请严格用以下 JSON 格式返回（不要任何其他内容、不要 markdown 代码块）：\n'
-                    '{"summary": "<一句话需求概述>",'
-                    '"ambiguous_points": ['
-                    '{"question": "...", "context": "...", "category": "边界值|权限|异常|业务规则|性能|兼容性|其他"}'
-                    ']}'
-                )
-                fb = llm.generate_structured(
-                    system_prompt="你只输出 JSON。",
-                    user_message=fallback_prompt,
-                )
-                if isinstance(fb, dict):
-                    if fb.get('ambiguous_points'):
-                        for q in fb['ambiguous_points']:
-                            if isinstance(q, dict) and q.get('question'):
-                                ambiguous_points.append({
-                                    'question': q.get('question', ''),
-                                    'context': q.get('context', ''),
-                                    'category': q.get('category', 'general'),
-                                })
-                    if not parsed.get('summary') and fb.get('summary'):
-                        parsed['summary'] = fb['summary']
-            except Exception as e:
-                logger.debug("fallback edge detection failed: %s", e)
-
-        # Build a short summary (1-3 sentences) from parsed structure
-        summary = parsed.get('summary') or parsed.get('description') or parsed.get('title') or ''
-        if not summary and parsed.get('requirements'):
-            try:
-                first_req = parsed['requirements'][0] if isinstance(parsed['requirements'], list) else parsed['requirements']
-                if isinstance(first_req, dict):
-                    summary = first_req.get('description') or first_req.get('summary') or ''
-                else:
-                    summary = str(first_req)[:200]
-            except Exception:
-                pass
+        summary = str(result.get('summary') or '').strip()[:500]
 
         return jsonify({
             'status': 'success',
-            'parsed': parsed,
+            'parsed': {'summary': summary, 'ambiguous_points': ambiguous_points},
             'ambiguous_points': ambiguous_points,
-            'summary': summary[:500] if summary else '',
-            'has_error': bool(output.error),
-            'error': output.error or None,
+            'summary': summary,
+            'has_error': False,
+            'error': None,
         })
     except Exception as e:
         logger.error("Error previewing requirement: %s", e, exc_info=True)
