@@ -410,10 +410,161 @@ class Orchestrator:
         self.state.qa_output = qa_output.content
         self.state.qa_thinking = qa_output.thinking
 
+        # Defensive fallback: some LLM backends may return questions or an
+        # incomplete JSON object without test_suites. The product contract is
+        # that a successful workflow returns test cases, so build a conservative
+        # evidence-backed suite from PM/FE/BE outputs instead of returning empty.
+        if not self._has_generated_test_cases(self.state.qa_output):
+            logger.warning("QA output has no test_suites; building fallback test cases")
+            self.state.qa_output = self._build_fallback_test_cases()
+            self.state.qa_thinking = {
+                **(self.state.qa_thinking or {}),
+                "fallback_generated": True,
+                "reason": "QA output missing test_suites/test_cases"
+            }
+
         # Store test cases in memory
         self._store_test_cases()
 
         self._notify_state_change()
+
+    def _has_generated_test_cases(self, output: Dict[str, Any]) -> bool:
+        """Return True when QA output contains at least one test case."""
+        if not isinstance(output, dict):
+            return False
+        suites = output.get("test_suites") or []
+        for suite in suites:
+            if suite.get("test_cases"):
+                return True
+        return False
+
+    def _build_fallback_test_cases(self) -> Dict[str, Any]:
+        """Build conservative fallback test cases from available evidence.
+
+        This is used only when the QA LLM returns no test_suites. It keeps the
+        evidence-chain contract by attaching requirement/business/API/code refs
+        to every generated case.
+        """
+        pm = self.state.pm_output or {}
+        fe = self.state.fe_output or {}
+        be = self.state.be_output or {}
+
+        req_id = pm.get("requirement_id") or "REQ_FALLBACK"
+        title = pm.get("title") or "需求测试用例"
+        business_rules = pm.get("business_rules") or []
+        acceptance = pm.get("acceptance_criteria") or []
+        user_stories = pm.get("user_stories") or []
+
+        evidence_chain = []
+        evidence_chain.append({
+            "type": "REQ_STRUCT",
+            "ref_id": req_id,
+            "content": title,
+        })
+        for i, rule in enumerate(business_rules[:5], 1):
+            evidence_chain.append({
+                "type": "BIZ_RULE",
+                "ref_id": rule.get("id") or f"BR_{i}",
+                "content": rule.get("rule") or rule.get("description") or str(rule),
+            })
+        for i, api in enumerate((be.get("api_definitions") or be.get("apis") or [])[:5], 1):
+            evidence_chain.append({
+                "type": "API_DEF",
+                "ref_id": f"API_{i}",
+                "content": f"{api.get('method', '')} {api.get('path', api.get('url', ''))}".strip(),
+            })
+        for i, comp in enumerate((fe.get("components") or fe.get("affected_components") or [])[:5], 1):
+            evidence_chain.append({
+                "type": "CODE_ANALYZE",
+                "ref_id": f"FE_{i}",
+                "content": comp.get("name") if isinstance(comp, dict) else str(comp),
+            })
+        if not evidence_chain:
+            evidence_chain.append({"type": "REQ_RAW", "ref_id": "REQ_RAW", "content": self.state.original_requirement})
+
+        base_ref = evidence_chain[0]["ref_id"]
+        test_cases = []
+        idx = 1
+
+        def add_case(title_text: str, priority: str, steps: List[Dict[str, str]], evidence=None):
+            nonlocal idx
+            chain = evidence or evidence_chain
+            test_cases.append({
+                "test_case_id": f"TC_FALLBACK_{idx:03d}",
+                "title": title_text,
+                "priority": priority,
+                "preconditions": ["测试环境可用", "用户/权限/数据已按需求准备"],
+                "test_steps": steps,
+                "evidence_chain": chain,
+            })
+            idx += 1
+
+        add_case(
+            f"{title} - 正向主流程",
+            "high",
+            [
+                {"step_number": 1, "action": "按需求描述进入对应功能入口", "expected_result": "页面/接口入口可正常访问", "evidence_ref": base_ref},
+                {"step_number": 2, "action": "输入/提交一组满足需求条件的有效数据", "expected_result": "系统按业务规则成功处理", "evidence_ref": base_ref},
+                {"step_number": 3, "action": "检查页面反馈、接口响应、数据落库/状态变化", "expected_result": "结果与需求和已确认边界一致", "evidence_ref": base_ref},
+            ],
+        )
+
+        if acceptance:
+            for ac in acceptance[:3]:
+                content = ac.get("criteria") or ac.get("description") or str(ac)
+                ref = ac.get("id") or base_ref
+                ac_chain = evidence_chain + [{"type": "REQ_STRUCT", "ref_id": ref, "content": content}]
+                add_case(
+                    f"验收条件校验 - {content[:40]}",
+                    "high",
+                    [
+                        {"step_number": 1, "action": f"构造满足验收条件的数据/场景：{content}", "expected_result": "场景可执行", "evidence_ref": ref},
+                        {"step_number": 2, "action": "执行对应操作", "expected_result": "系统输出符合验收条件", "evidence_ref": ref},
+                    ],
+                    ac_chain,
+                )
+
+        if business_rules:
+            for rule in business_rules[:3]:
+                content = rule.get("rule") or rule.get("description") or str(rule)
+                ref = rule.get("id") or base_ref
+                add_case(
+                    f"业务规则校验 - {content[:40]}",
+                    "medium",
+                    [
+                        {"step_number": 1, "action": f"准备触发业务规则的数据：{content}", "expected_result": "测试数据准备完成", "evidence_ref": ref},
+                        {"step_number": 2, "action": "执行功能操作", "expected_result": "系统严格按业务规则处理", "evidence_ref": ref},
+                    ],
+                )
+
+        # Always include one negative/boundary case.
+        add_case(
+            f"{title} - 异常/边界场景",
+            "medium",
+            [
+                {"step_number": 1, "action": "输入缺失、非法、越界或未授权的数据", "expected_result": "系统拒绝处理并给出明确错误提示/错误码", "evidence_ref": base_ref},
+                {"step_number": 2, "action": "检查数据状态和副作用", "expected_result": "不产生错误落库、重复提交或越权访问", "evidence_ref": base_ref},
+            ],
+        )
+
+        return {
+            "test_plan": {
+                "test_plan_id": "TP_FALLBACK_001",
+                "requirement_id": req_id,
+                "summary": f"{title} 的兜底测试计划",
+                "scope": "正向主流程、验收条件、业务规则、异常/边界场景",
+                "out_of_scope": "未在需求/人工确认/知识库中出现的外部系统行为",
+            },
+            "test_suites": [
+                {
+                    "suite_id": "TS_FALLBACK_001",
+                    "suite_name": f"{title} 测试套件",
+                    "test_cases": test_cases,
+                }
+            ],
+            "questions": [],
+            "fallback_generated": True,
+        }
 
     def provide_clarification(self, answers: List[Dict[str, str]]) -> Dict[str, Any]:
         """

@@ -254,7 +254,13 @@ class LLMAdapter:
             logger.error(f"Structured generation error: {response.error}")
             return None
 
-        if response.raw_response:
+        # Prefer parsed JSON stored by generate(json_response=True), but do not
+        # return transport metadata such as {"stdout": "..."}. The Claude CLI
+        # adapter stores stdout in raw_response for debugging; returning that
+        # directly breaks downstream schema validation (PM/QA see a dict without
+        # requirement_id/test_suites). Only trust raw_response if it is not just
+        # the transport wrapper.
+        if isinstance(response.raw_response, dict) and "stdout" not in response.raw_response:
             return response.raw_response
 
         # Try to extract JSON from content

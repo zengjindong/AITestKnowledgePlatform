@@ -319,6 +319,12 @@ def process_requirement():
 
         # Build enriched prompt
         sections = [requirement]
+        if edge_confirmations:
+            sections.append(
+                "## 流程控制要求\n"
+                "本次需求已经经过前置的 AI 边界分析与用户确认。后续 PM/FE/BE/QA 不应再因为一般边界不明确而中断流程。"
+                "如果仍有未明确点，请将其作为“待确认风险/待确认测试场景”写入测试用例和证据链，而不是返回 needs_clarification。"
+            )
         if extra_notes:
             sections.append(
                 "## 用户补充的额外说明（人工提供，需要在测试用例/证据链中体现）\n"
@@ -369,6 +375,27 @@ def process_requirement():
 
         orchestrator = get_orchestrator()
         result = orchestrator.run(enriched_requirement)
+
+        # After the new preflight boundary-confirmation flow, the final submit
+        # should produce test cases. If PM still asks generic clarification
+        # questions, auto-answer them as "treat as confirmed risk" and continue.
+        if result.get('status') == 'needs_clarification' and (edge_confirmations or tech_review_confirmed):
+            auto_answers = [
+                {
+                    'question': q,
+                    'answer': '按前置边界确认和技术审核结果处理；若仍不明确，请作为待确认风险/待确认测试场景写入测试用例。'
+                }
+                for q in result.get('questions', [])
+            ]
+            logger.info("Auto-continuing after PM clarification with %d answers", len(auto_answers))
+            clarified_requirement = (
+                enriched_requirement
+                + "\n\n## PM 追加澄清（系统根据前置确认自动继续）\n"
+                + json.dumps(auto_answers, ensure_ascii=False, indent=2)
+                + "\n\n请不要再次中断流程，必须继续生成测试用例。"
+            )
+            result = orchestrator.run(clarified_requirement)
+
         result['selected_frontend_context'] = merged_fe
         result['selected_backend_context'] = merged_be
         result['auto_matched'] = {
